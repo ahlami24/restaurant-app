@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.user import create_user as create_user_service
 from app.routes.dependencies import require_role
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(
     prefix="/users",
@@ -15,28 +16,33 @@ router = APIRouter(
 
 @router.post("", response_model=UserResponse)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
-
     duplicate_phone_user = (
         db.query(User).filter(User.phone == user.phone).first()
     )
-
     if duplicate_phone_user:
         raise HTTPException(
             status_code=400,
-            detail="User with this phone number already exists"
+            detail="User with this phone number already exists",
         )
 
-    new_user = create_user_service(
-        db,
-        user.name,
-        user.phone,
-        UserRole.customer,
-        user.password
-    )
+    try:
+        new_user = create_user_service(
+            db,
+            user.name,
+            user.phone,
+            UserRole.customer,
+            user.password,
+            email=user.email,
+        )
+        db.commit()
+        db.refresh(new_user)
+        return new_user
 
-    db.commit()
-    db.refresh(new_user)
-
-    return new_user
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Phone number or email already exists",
+        )
 
 

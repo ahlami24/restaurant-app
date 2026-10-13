@@ -18,3 +18,4 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     customer = relationship("Customer", back_populates="user", uselist=False)
     role: Mapped[UserRole] = mapped_column(SQLAlchemyEnum(UserRole), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
