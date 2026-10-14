@@ -1,3 +1,5 @@
+from datetime import timedelta, timezone, datetime
+
 from app.services.auth import verify_password
 
 
@@ -112,6 +114,56 @@ def test_auth_me_with_invalid_token(client):
     response = client.get(
         "/auth/me",
         headers={"Authorization": "Bearer invalid.token.value"},
+    )
+
+    assert response.status_code == 401
+
+def test_auth_me_without_token_returns_401(client):
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+
+
+def test_auth_me_with_expired_token_returns_401(client):
+
+    import jwt
+
+    from app.services.auth import ALGORITHM, SECRET_KEY
+
+    expired_payload = {
+        "sub": "1",
+        "role": "customer",
+        "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+    }
+    expired_token = jwt.encode(
+        expired_payload,
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+    response = client.get(
+        "/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_auth_me_with_invalid_user_id_returns_401(client):
+    import jwt
+
+    from app.services.auth import ALGORITHM, SECRET_KEY
+
+    payload = {
+        "sub": "not-a-number",
+        "role": "customer",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+    response = client.get(
+        "/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 401
