@@ -11,7 +11,7 @@ from app.models import customer, food, order, order_item, user
 
 
 @pytest.fixture
-def client():
+def db_session():
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -25,13 +25,20 @@ def client():
     )
 
     Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
 
+    try:
+        yield db
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+@pytest.fixture
+def client(db_session):
     def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+        yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
 
@@ -39,5 +46,3 @@ def client():
         yield test_client
 
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
