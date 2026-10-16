@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, Float
+from sqlalchemy import Integer, String, Float, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -12,3 +12,5 @@ class Food(Base):
     price: Mapped[float] = mapped_column(Float, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     order_items = relationship("OrderItem", back_populates="food")
+    restaurant_id: Mapped[int] = mapped_column(Integer, ForeignKey("restaurants.id"), nullable=True)
+    restaurant = relationship("Restaurant", back_populates="foods")

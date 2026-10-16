@@ -17,6 +17,7 @@ def test_get_customers(client):
     )
 
     response = client.get("/customers")
+    print(response.json())
 
     assert response.status_code == 200
     assert len(response.json()) == 1

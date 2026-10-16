@@ -1,6 +1,6 @@
 from app.schemas import (
-    OrderCreate, 
-    OrderResponse, 
+    OrderCreate,
+    OrderResponse,
     OrderStatusUpdate,
     OrderItemUpdate
 )
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.order import (
-    create_order as create_order_service, 
+    create_order as create_order_service,
     update_order_status as update_order_status_service,
     get_orders as get_orders_service,
     get_order_by_id as get_order_by_id_service,
@@ -16,33 +16,62 @@ from app.services.order import (
 )
 
 from app.models.user import User
-from app.routes.dependencies import get_current_user
+from app.routes.dependencies import get_current_user, require_role, get_restaurant_membership
 from app.models.customer import Customer
 from app.models.order import Order
+from app.models.restaurant import Restaurant, RestaurantMembership
 
 router = APIRouter()
 
-@router.post("/orders", response_model=OrderResponse)
-def create_order(order: OrderCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post("/restaurants/{restaurant_slug}/orders", response_model=OrderResponse)
+def create_order(
+    restaurant_slug: str,
+    order: OrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("customer"))
+    ):
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.slug == restaurant_slug
+    ).first()
+
+    if not restaurant:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Restaurant with slug '{restaurant_slug}' not found"
+        )
+
+    customer = db.query(Customer).filter(
+        Customer.user_id == current_user.id
+    ).first()
+
+    if not customer:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Customer profile not found"
+        )
     try:
-        customer = db.query(Customer).filter(Customer.user_id == current_user.id).first()
-        if not customer:
-            raise HTTPException(status_code=404, detail="Customer not found for the current user")
-        new_order = create_order_service(db, order, customer.id)
+        new_order = create_order_service(
+            db, order, customer.id, restaurant.id
+        )
         db.commit()
         db.refresh(new_order)
         return new_order
+
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException as e:
-        raise
-    except Exception as e:
         db.rollback()
-        print("ORDER ERROR:", repr(e))
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    except Exception:
+        db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=str(e)
-    )
+            detail="Internal Server Error"
+        )
+
 
 @router.get("/orders", response_model=list[OrderResponse])
 def get_orders(
@@ -62,18 +91,26 @@ def get_orders(
 
         return get_orders_service(db, customer.id)
 
-    elif current_user.role.value == "restaurant_owner":
-        return db.query(Order).all()
-
-    elif current_user.role.value == "delivery_person":
+    if current_user.role.value == "delivery_person":
         return db.query(Order).filter(
-            Order.status.in_(["ready", "out_for_delivery"]))
+            Order.status.in_(["ready", "out_for_delivery"])
+        ).all()
 
-    else:
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to view orders"
-        )
+    raise HTTPException(
+        status_code=403,
+        detail="You do not have permission to view orders"
+    )
+
+@router.get("/restaurants/{restaurant_slug}/orders", response_model=list[OrderResponse])
+def get_restaurant_orders(
+    restaurant_slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    membership: RestaurantMembership = Depends(get_restaurant_membership)
+):
+    return db.query(Order).filter(
+        Order.restaurant_id == membership.restaurant_id
+    ).all()
 
 @router.patch("/orders/{order_id}/status", response_model=OrderResponse)
 def update_order_status(
@@ -82,32 +119,75 @@ def update_order_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        order = update_order_status_service(
-            db,
-            order_id,
-            status_update.status,
-            current_user.role.value
+    user_role = current_user.role.value
+    customer_id = None
+    restaurant_id = None
+
+    if user_role == "customer":
+        customer = db.query(Customer).filter(
+            Customer.user_id == current_user.id
+        ).first()
+
+        if not customer:
+            raise HTTPException(
+                status_code=404,
+                detail="Customer profile not found"
+            )
+        customer_id = customer.id
+
+    elif user_role in ("restaurant_owner", "delivery_person"):
+        membership = db.query(RestaurantMembership).filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role.in_(
+                    ["owner", "manager"]
+                    if user_role == "restaurant_owner"
+                    else ["delivery_person"]
+                )
+            ).first()
+        if not membership:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to update order status"
+            )
+        restaurant_id = membership.restaurant_id
+    else:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to update order status"
         )
 
+    try:
+        order = update_order_status_service(
+            db=db,
+            order_id=order_id,
+            new_status=status_update.status,
+            user_role=user_role,
+            customer_id=customer_id,
+            restaurant_id=restaurant_id
+        )
         db.commit()
         db.refresh(order)
-
         return order
-
+    except PermissionError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=403,
+            detail=str(e)
+        )
     except ValueError as e:
         db.rollback()
         raise HTTPException(
             status_code=400,
             detail=str(e)
         )
-
-    except Exception:
+    except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=500,
             detail="Internal Server Error"
         )
+
+
 @router.patch("/orders/{order_id}/items", response_model=OrderResponse)
 def update_order_items(
     order_id: int,
@@ -152,4 +232,3 @@ def update_order_items(
             detail="Internal Server Error"
         )
 
-    

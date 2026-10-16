@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import get_db
 from app.main import app
 from app.models.food import Base
-from app.models import customer, food, order, order_item, user
+from app.models import customer, food, order, order_item, user, restaurant
 
 
 @pytest.fixture

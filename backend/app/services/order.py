@@ -18,9 +18,10 @@ ALLOWED_ROLES = {
     "cancelled": ["customer"],
 }
 
-def create_order(db, order, customer_id):
+def create_order(db, order, customer_id, restaurant_id):
     new_order = Order(
         customer_id=customer_id,
+        restaurant_id=restaurant_id,
         address=order.address,
         total_price=0,
         status="pending"
@@ -31,7 +32,7 @@ def create_order(db, order, customer_id):
         raise ValueError("Duplicate food_id found in order_items. Each food_id must be unique.")
 
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    
+
     if not customer:
         raise ValueError(
             f"Customer with id {customer_id} does not exist"
@@ -40,10 +41,9 @@ def create_order(db, order, customer_id):
         food.id: food.price
         for food in db.query(Food)
         .filter(
-            Food.id.in_(
-                [item.food_id for item in order.order_items]
+            Food.id.in_(food_ids),
+            Food.restaurant_id == restaurant_id,
             )
-        )
         .all()
     }
 
@@ -53,7 +53,7 @@ def create_order(db, order, customer_id):
             raise ValueError(
                 f"Food with id {item.food_id} does not exist"
             )
-    
+
     # Add the order and get its generated ID
     db.add(new_order)
     db.flush()
@@ -83,16 +83,27 @@ def get_orders(db, customer_id):
 def get_order_by_id(db, order_id, customer_id):
     return db.query(Order).filter(Order.id == order_id, Order.customer_id == customer_id).first()
 
-def update_order_status(db, order_id, new_status, user_role):
+def update_order_status(db, order_id, new_status, user_role, customer_id=None, restaurant_id=None):
     new_status = new_status.value
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise ValueError(f"Order with id {order_id} does not exist")
 
+    if user_role == "customer":
+        if order.customer_id != customer_id:
+            raise ValueError("Customer does not have permission to update this order")
+        if new_status != "cancelled":
+            raise PermissionError("You can only cancel your own orders")
+    elif user_role in ["restaurant_owner", "delivery_person"]:
+        if order.restaurant_id != restaurant_id:
+            raise ValueError("You do not have permission to update this order")
+    else:
+        raise PermissionError("You do not have permission to update this order")
+
     current_status = order.status
     if current_status not in ALLOWED_TRANSITIONS:
         raise ValueError(f"Current status '{current_status}' is not valid for transition")
-    
+
     allowed_next_status = ALLOWED_TRANSITIONS[current_status]
     if new_status not in allowed_next_status:
         raise ValueError(f"Cannot transition from '{current_status}' to '{new_status}'")
@@ -100,57 +111,71 @@ def update_order_status(db, order_id, new_status, user_role):
     allowed_roles = ALLOWED_ROLES.get(new_status, [])
     if user_role not in allowed_roles:
         raise ValueError(f"Role '{user_role}' is not allowed to update order status to '{new_status}'")
-    if user_role == "delivery_person" and order.status not in [
-        "ready",
-        "out_for_delivery"
-    ]:
-        raise ValueError(
-            "Delivery persons can only update orders that are ready for delivery"
-    )
     order.status = new_status
     return order
 
 def update_order_items(db, order_id, customer_id, items):
-    order = db.query(Order).filter(Order.id == order_id, Order.customer_id == customer_id).first()
+    order = db.query(Order).filter(
+        Order.id == order_id,
+        Order.customer_id == customer_id,
+    ).first()
+
     if not order:
         raise ValueError("Order not found")
+
     if order.status != "pending":
         raise ValueError("Only pending orders can be updated")
-    # Get all the food IDs from the items
+
     food_ids = [item.food_id for item in items]
 
-    # Create a mapping of food_id to OrderItem for quick lookup
-    existing_items = {item.food_id: item for item in order.order_items}
+    if len(food_ids) != len(set(food_ids)):
+        raise ValueError(
+            "Duplicate food_id found. Each food_id must be unique."
+        )
 
     food_prices = {
         food.id: food.price
-        for food in db.query(Food)
-        .filter(Food.id.in_(food_ids))
-        .all()
+        for food in db.query(Food).filter(
+            Food.id.in_(food_ids),
+            Food.restaurant_id == order.restaurant_id,
+        ).all()
     }
 
-    for item in items:
-        if item.food_id not in food_prices:
-            raise ValueError(f"Food with id {item.food_id} does not exist")
+    for food_id in food_ids:
+        if food_id not in food_prices:
+            raise ValueError(
+                f"Food with id {food_id} does not exist in this restaurant"
+            )
 
+    existing_items = {
+        item.food_id: item
+        for item in order.order_items
+    }
+    requested_food_ids = set(food_ids)
+
+    # Remove items omitted from the updated request.
+    for food_id, existing_item in existing_items.items():
+        if food_id not in requested_food_ids:
+            order.order_items.remove(existing_item)
+
+    # Update existing quantities or add new items.
+    for item in items:
         if item.food_id in existing_items:
-            # Update existing item
             existing_item = existing_items[item.food_id]
             existing_item.quantity = item.quantity
+            existing_item.price = food_prices[item.food_id]
         else:
-            # Add new item
-            new_order_item = OrderItem(
-                food_id=item.food_id,
-                quantity=item.quantity,
-                price=food_prices[item.food_id]
+            order.order_items.append(
+                OrderItem(
+                    food_id=item.food_id,
+                    quantity=item.quantity,
+                    price=food_prices[item.food_id],
+                )
             )
-            order.order_items.append(new_order_item)
 
-    # Recalculate total price
-    total_price = sum(
+    order.total_price = sum(
         item.price * item.quantity
         for item in order.order_items
     )
-    order.total_price = total_price
 
     return order

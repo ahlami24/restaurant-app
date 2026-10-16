@@ -167,3 +167,98 @@ def test_auth_me_with_invalid_user_id_returns_401(client):
     )
 
     assert response.status_code == 401
+
+
+def test_register_user_without_email(client):
+    response = client.post(
+        "/users",
+        json={
+            "name": "No Email User",
+            "phone": "0911000020",
+            "password": "StrongTestPassword123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] is None
+
+
+def test_register_duplicate_email_returns_400(client):
+    first_response = client.post(
+        "/users",
+        json={
+            "name": "First User",
+            "phone": "0911000021",
+            "email": "duplicate@example.com",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/users",
+        json={
+            "name": "Second User",
+            "phone": "0911000022",
+            "email": "duplicate@example.com",
+            "password": "StrongTestPassword123",
+        },
+    )
+
+    assert second_response.status_code == 400
+
+
+def test_register_invalid_email_returns_422(client):
+    response = client.post(
+        "/users",
+        json={
+            "name": "Invalid Email User",
+            "phone": "0911000023",
+            "email": "not-an-email",
+            "password": "StrongTestPassword123",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_duplicate_email_with_different_case_returns_400(client):
+    first_response = client.post(
+        "/users",
+        json={
+            "name": "First Case User",
+            "phone": "0911000024",
+            "email": "CaseTest@example.com",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/users",
+        json={
+            "name": "Second Case User",
+            "phone": "0911000025",
+            "email": "casetest@EXAMPLE.com",
+            "password": "StrongTestPassword123",
+        },
+    )
+
+    assert second_response.status_code == 400
+
+
+def test_login_with_legacy_phone_field(client):
+    register_response = register_user(client)
+    assert register_response.status_code == 200
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000010",
+            "password": "StrongTestPassword123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["token_type"] == "bearer"
+    assert response.json()["access_token"]

@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-
+from app.models.restaurant import Restaurant, RestaurantMembership
 from app.database import get_db
 from app.models.user import User
 from app.services.auth import decode_access_token
@@ -48,3 +48,37 @@ def require_role(required_role: str):
             )
         return current_user
     return role_checker
+
+def get_restaurant_membership(
+    restaurant_slug: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    restaurant = (
+        db.query(Restaurant)
+        .filter(Restaurant.slug == restaurant_slug)
+        .first()
+    )
+
+    if restaurant is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Restaurant not found",
+        )
+
+    membership = (
+        db.query(RestaurantMembership)
+        .filter(
+            RestaurantMembership.user_id == current_user.id,
+            RestaurantMembership.restaurant_id == restaurant.id,
+        )
+        .first()
+    )
+
+    if membership is None or membership.role not in ("owner", "manager"):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access this resource",
+        )
+
+    return membership
