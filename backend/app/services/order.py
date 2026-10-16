@@ -47,14 +47,12 @@ def create_order(db, order, customer_id, restaurant_id):
         .all()
     }
 
-    # Validate all foods before changing the database
     for item in order.order_items:
         if item.food_id not in food_prices:
             raise ValueError(
                 f"Food with id {item.food_id} does not exist"
             )
 
-    # Add the order and get its generated ID
     db.add(new_order)
     db.flush()
 
@@ -68,7 +66,6 @@ def create_order(db, order, customer_id, restaurant_id):
 
         new_order.order_items.append(order_item)
 
-    # Calculate total from server-side prices
     total_price = sum(
         item.price * item.quantity
         for item in new_order.order_items
@@ -83,7 +80,16 @@ def get_orders(db, customer_id):
 def get_order_by_id(db, order_id, customer_id):
     return db.query(Order).filter(Order.id == order_id, Order.customer_id == customer_id).first()
 
-def update_order_status(db, order_id, new_status, user_role, customer_id=None, restaurant_id=None):
+def update_order_status(
+        db,
+        order_id,
+        new_status,
+        user_role,
+        customer_id=None,
+        restaurant_id=None,
+        restaurant_ids=None
+    ):
+
     new_status = new_status.value
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
@@ -95,8 +101,12 @@ def update_order_status(db, order_id, new_status, user_role, customer_id=None, r
         if new_status != "cancelled":
             raise PermissionError("You can only cancel your own orders")
     elif user_role in ["restaurant_owner", "delivery_person"]:
-        if order.restaurant_id != restaurant_id:
-            raise ValueError("You do not have permission to update this order")
+        if order.restaurant_id is not None:
+            authorized = order.restaurant_id in restaurant_ids
+        else:
+            authorized = order.restaurant_id == restaurant_id
+        if not authorized:
+            raise PermissionError("You do not have permission to update this order")
     else:
         raise PermissionError("You do not have permission to update this order")
 

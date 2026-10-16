@@ -8,4 +8,4 @@ PyJWT
 pwdlib[argon2]
 pydantic[email]
 pytest
-httpx
+httpx2

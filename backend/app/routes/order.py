@@ -20,6 +20,7 @@ from app.routes.dependencies import get_current_user, require_role, get_restaura
 from app.models.customer import Customer
 from app.models.order import Order
 from app.models.restaurant import Restaurant, RestaurantMembership
+from sqlalchemy import select
 
 router = APIRouter()
 
@@ -92,7 +93,15 @@ def get_orders(
         return get_orders_service(db, customer.id)
 
     if current_user.role.value == "delivery_person":
+        restaurant_ids = select(
+            RestaurantMembership.restaurant_id
+            ).where(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role == "delivery_person"
+            )
+
         return db.query(Order).filter(
+            Order.restaurant_id.in_(restaurant_ids),
             Order.status.in_(["ready", "out_for_delivery"])
         ).all()
 
@@ -143,13 +152,13 @@ def update_order_status(
                     if user_role == "restaurant_owner"
                     else ["delivery_person"]
                 )
-            ).first()
+            ).all()
         if not membership:
             raise HTTPException(
                 status_code=403,
                 detail="You do not have permission to update order status"
             )
-        restaurant_id = membership.restaurant_id
+        restaurant_ids = [m.restaurant_id for m in membership]
     else:
         raise HTTPException(
             status_code=403,
@@ -163,7 +172,8 @@ def update_order_status(
             new_status=status_update.status,
             user_role=user_role,
             customer_id=customer_id,
-            restaurant_id=restaurant_id
+            restaurant_id=restaurant_id,
+            restaurant_ids=restaurant_ids if user_role in ("restaurant_owner", "delivery_person") else None
         )
         db.commit()
         db.refresh(order)
