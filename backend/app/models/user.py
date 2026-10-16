@@ -8,6 +8,7 @@ class UserRole(str, Enum):
     customer = "customer"
     restaurant_owner = "restaurant_owner"
     delivery_person = "delivery_person"
+    platform_admin = "platform_admin"
 
 
 class User(Base):

@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.models.restaurant import Restaurant, RestaurantMembership
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.auth import decode_access_token
 
 security = HTTPBearer()
@@ -82,3 +82,14 @@ def get_restaurant_membership(
         )
 
     return membership
+
+
+def require_platform_admin(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.platform_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Platform administrator access required",
+        )
+    return current_user

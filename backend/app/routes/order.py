@@ -32,7 +32,8 @@ def create_order(
     current_user: User = Depends(require_role("customer"))
     ):
     restaurant = db.query(Restaurant).filter(
-        Restaurant.slug == restaurant_slug
+        Restaurant.slug == restaurant_slug,
+        Restaurant.is_active.is_(True),
     ).first()
 
     if not restaurant:
