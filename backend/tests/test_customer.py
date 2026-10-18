@@ -181,6 +181,11 @@ def test_update_customer(client, db_session):
         headers={"Authorization": f"Bearer {token}"},
     )
 
-    assert response.status_code == 200
-    assert response.json()["name"] == "New Name"
-    assert response.json()["phone"] == "0911000005"
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "You do not have permission to update this customer"
+    )
+
+    db_session.refresh(customer)
+    assert customer.name == "Old Name"
+    assert customer.phone == "0911000005"

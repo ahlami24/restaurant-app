@@ -146,7 +146,6 @@ def get_customer_by_id(
         )
 
 
-# UPDATE CUSTOMER
 @router.put("/customers/{customer_id}", response_model=CustomerResponse)
 def update_customer(
     customer_id: int,
@@ -163,32 +162,10 @@ def update_customer(
                 detail="Customer not found",
             )
 
-        # Platform administrators can update any customer.
-        if current_user.role == UserRole.platform_admin:
-            pass
-
-        # Customers can update only their own profile.
-        elif current_user.role == UserRole.customer:
-            if existing_customer.user_id != current_user.id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have permission to update this customer",
-                )
-
-        # Restaurant owners can update customers associated
-        # with restaurants they own.
-        elif current_user.role == UserRole.restaurant_owner:
-            if not customer_belongs_to_owner_restaurant(
-                db,
-                current_user.id,
-                existing_customer.id,
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have permission to update this customer",
-                )
-
-        else:
+        if (
+            current_user.role != UserRole.customer
+            or existing_customer.user_id != current_user.id
+        ):
             raise HTTPException(
                 status_code=403,
                 detail="You do not have permission to update this customer",
