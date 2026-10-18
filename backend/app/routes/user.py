@@ -51,7 +51,9 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 @router.get("/", response_model=list[UserResponse])
 def get_all_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.platform_admin.value)),
+    current_user: User = Depends(
+        require_role(UserRole.platform_admin.value)
+    ),
 ):
-    users = db.query(User).all()
+    users = db.query(User).order_by(User.id.asc()).all()
     return users

@@ -1,4 +1,6 @@
 from app.models.restaurant import Restaurant
+from app.models.user import User, UserRole
+from app.services.auth import create_access_token, hash_password
 
 
 def test_list_restaurants_returns_active_restaurants(client, db_session):
@@ -184,3 +186,96 @@ def test_customer_cannot_change_restaurant_activation(client, db_session):
     db_session.refresh(restaurant)
     assert response.status_code == 403
     assert restaurant.is_active is False
+
+def test_platform_admin_can_list_all_restaurants(client, db_session):
+    from app.models.user import User, UserRole
+    from app.services.auth import create_access_token, hash_password
+
+    admin = User(
+        name="Platform Admin",
+        phone="09119990101",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    restaurants = [
+        Restaurant(
+            name="Active Restaurant",
+            slug="active-restaurant",
+            is_active=True,
+        ),
+        Restaurant(
+            name="Inactive Restaurant",
+            slug="inactive-restaurant",
+            is_active=False,
+        ),
+    ]
+    db_session.add_all([admin, *restaurants])
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {item["slug"] for item in data} == {
+        "active-restaurant",
+        "inactive-restaurant",
+    }
+
+
+def test_customer_cannot_list_all_restaurants_as_admin(client, db_session):
+   
+    customer = User(
+        name="Regular Customer",
+        phone="09119990102",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.customer,
+    )
+    db_session.add(customer)
+    db_session.commit()
+
+    token = create_access_token(customer.id, UserRole.customer.value)
+    response = client.get(
+        "/restaurants/admin",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_unauthenticated_user_cannot_list_all_restaurants(client):
+    response = client.get("/restaurants/admin")
+
+    assert response.status_code in (401, 403)
+
+
+def test_platform_admin_can_get_inactive_restaurant_by_slug(
+    client, db_session
+):
+    admin = User(
+        name="Platform Admin",
+        phone="09119990103",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    restaurant = Restaurant(
+        name="Inactive Restaurant",
+        slug="admin-inactive-restaurant",
+        is_active=False,
+    )
+    db_session.add_all([admin, restaurant])
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin/admin-inactive-restaurant",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "admin-inactive-restaurant"
+    assert response.json()["is_active"] is False
