@@ -31,6 +31,16 @@ class RestaurantOwnerAssign(BaseModel):
     model_config = ConfigDict(extra="forbid")
     user_id: int = Field(gt=0)
 
+class DeliveryPersonAssign(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: int = Field(gt=0)
+
+class DeliveryPersonAssignmentResponse(BaseModel):
+    message: str
+    user_id: int
+    restaurant_id: int
+    role: str
+
 
 class RestaurantActivationUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
