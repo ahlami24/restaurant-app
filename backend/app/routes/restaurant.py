@@ -23,11 +23,29 @@ from app.services.restaurant import (
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
 
-# Public endpoints: only active restaurants are visible.
 @router.get("", response_model=list[RestaurantResponse])
 def get_restaurants(db: Session = Depends(get_db)):
     return get_restaurants_service(db)
 
+@router.get("/admin", response_model=list[RestaurantResponse])
+def get_all_restaurants(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_platform_admin),
+):
+    return db.query(Restaurant).order_by(Restaurant.id.asc()).all()
+
+@router.get("/admin/{restaurant_slug}", response_model=RestaurantResponse)
+def get_restaurant_by_slug_admin(
+    restaurant_slug: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_platform_admin),
+):
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug).first()
+
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    return restaurant
 
 @router.get("/{restaurant_slug}", response_model=RestaurantResponse)
 def get_restaurant(
@@ -42,7 +60,6 @@ def get_restaurant(
     return restaurant
 
 
-# Platform administrator endpoints.
 @router.post(
     "",
     response_model=RestaurantResponse,

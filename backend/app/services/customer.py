@@ -1,9 +1,5 @@
 from app.models.customer import Customer
 
-def create_customer(db, customer):
-    new_customer = Customer(name=customer.name, phone=customer.phone)
-    db.add(new_customer)
-    return new_customer
 def get_customers(db):
     return db.query(Customer).all()
 
