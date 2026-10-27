@@ -677,3 +677,82 @@ def test_assign_nonexistent_user_as_delivery_person_returns_404(
     ).first()
 
     assert membership is None
+
+
+def test_platform_admin_can_list_restaurants_with_owners(client, db_session):
+    from app.models.restaurant import Restaurant, RestaurantMembership
+    from app.models.user import User, UserRole
+    from app.services.auth import create_access_token, hash_password
+
+    admin = User(
+        name="Platform Admin",
+        phone="09119990301",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    owner = User(
+        name="Abdi Owner",
+        phone="09119990302",
+        email="abdi.owner@example.com",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.restaurant_owner,
+    )
+    restaurant = Restaurant(
+        name="Abdi Restaurant",
+        slug="abdi-restaurant",
+        is_active=True,
+    )
+
+    db_session.add_all([admin, owner, restaurant])
+    db_session.flush()
+
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner.id,
+            restaurant_id=restaurant.id,
+            role="owner",
+        )
+    )
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin/owners",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == 1
+    assert data[0]["restaurant_name"] == "Abdi Restaurant"
+    assert data[0]["restaurant_slug"] == "abdi-restaurant"
+    assert data[0]["is_active"] is True
+    assert data[0]["owner"] == {
+        "user_id": owner.id,
+        "name": "Abdi Owner",
+        "phone": "09119990302",
+        "email": "abdi.owner@example.com",
+    }
+
+
+def test_customer_cannot_list_restaurants_with_owners(client, db_session):
+    from app.models.user import User, UserRole
+    from app.services.auth import create_access_token, hash_password
+
+    customer = User(
+        name="Regular Customer",
+        phone="09119990303",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.customer,
+    )
+    db_session.add(customer)
+    db_session.commit()
+
+    token = create_access_token(customer.id, UserRole.customer.value)
+    response = client.get(
+        "/restaurants/admin/owners",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403

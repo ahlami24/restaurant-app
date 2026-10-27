@@ -16,6 +16,7 @@ from app.schemas.restaurant import (
     RestaurantCreate,
     RestaurantOwnerAssign,
     RestaurantResponse,
+    AdminRestaurantOwnerResponse,
 )
 from app.services.restaurant import (
     get_restaurants as get_restaurants_service,
@@ -35,6 +36,43 @@ def get_all_restaurants(
     admin: User = Depends(require_platform_admin),
 ):
     return db.query(Restaurant).order_by(Restaurant.id.asc()).all()
+
+@router.get(
+    "/admin/owners",
+    response_model=list[AdminRestaurantOwnerResponse],
+)
+def get_restaurants_with_owners(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_platform_admin),
+):
+    restaurants = db.query(Restaurant).order_by(Restaurant.id.asc()).all()
+
+    results = []
+
+    for restaurant in restaurants:
+        membership = db.query(RestaurantMembership).filter(
+            RestaurantMembership.restaurant_id == restaurant.id,
+            RestaurantMembership.role == "owner",
+        ).first()
+
+        owner = None
+        if membership and membership.user:
+            owner = {
+                "user_id": membership.user.id,
+                "name": membership.user.name,
+                "phone": membership.user.phone,
+                "email": membership.user.email,
+            }
+
+        results.append({
+            "restaurant_id": restaurant.id,
+            "restaurant_name": restaurant.name,
+            "restaurant_slug": restaurant.slug,
+            "is_active": restaurant.is_active,
+            "owner": owner,
+        })
+
+    return results
 
 @router.get("/admin/{restaurant_slug}", response_model=RestaurantResponse)
 def get_restaurant_by_slug_admin(
