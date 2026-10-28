@@ -756,3 +756,43 @@ def test_customer_cannot_list_restaurants_with_owners(client, db_session):
     )
 
     assert response.status_code == 403
+
+def test_platform_admin_can_list_restaurant_without_owner(client, db_session):
+    from app.models.restaurant import Restaurant
+    from app.models.user import User, UserRole
+    from app.services.auth import create_access_token, hash_password
+
+    admin = User(
+        name="Platform Admin",
+        phone="09119990311",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    restaurant = Restaurant(
+        name="Ownerless Restaurant",
+        slug="ownerless-restaurant",
+        is_active=True,
+    )
+
+    db_session.add_all([admin, restaurant])
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+
+    response = client.get(
+        "/restaurants/admin/owners",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    restaurant_data = next(
+        item
+        for item in data
+        if item["restaurant_slug"] == "ownerless-restaurant"
+    )
+
+    assert restaurant_data["restaurant_name"] == "Ownerless Restaurant"
+    assert restaurant_data["is_active"] is True
+    assert restaurant_data["owner"] is None

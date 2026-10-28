@@ -17,6 +17,7 @@ from app.schemas.restaurant import (
     RestaurantOwnerAssign,
     RestaurantResponse,
     AdminRestaurantOwnerResponse,
+    RestaurantOwnerInfo,
 )
 from app.services.restaurant import (
     get_restaurants as get_restaurants_service,
@@ -41,38 +42,56 @@ def get_all_restaurants(
     "/admin/owners",
     response_model=list[AdminRestaurantOwnerResponse],
 )
+@router.get(
+    "/admin/owners",
+    response_model=list[AdminRestaurantOwnerResponse],
+)
 def get_restaurants_with_owners(
     db: Session = Depends(get_db),
     admin: User = Depends(require_platform_admin),
 ):
-    restaurants = db.query(Restaurant).order_by(Restaurant.id.asc()).all()
+    restaurants = (
+        db.query(
+            Restaurant,
+            User,
+        )
+        .outerjoin(
+            RestaurantMembership,
+            (Restaurant.id == RestaurantMembership.restaurant_id)
+            & (RestaurantMembership.role == "owner"),
+        )
+        .outerjoin(
+            User,
+            User.id == RestaurantMembership.user_id,
+        )
+        .order_by(Restaurant.id.asc())
+        .all()
+    )
 
-    results = []
+    response = []
 
-    for restaurant in restaurants:
-        membership = db.query(RestaurantMembership).filter(
-            RestaurantMembership.restaurant_id == restaurant.id,
-            RestaurantMembership.role == "owner",
-        ).first()
-
+    for restaurant, owner_user in restaurants:
         owner = None
-        if membership and membership.user:
-            owner = {
-                "user_id": membership.user.id,
-                "name": membership.user.name,
-                "phone": membership.user.phone,
-                "email": membership.user.email,
-            }
 
-        results.append({
-            "restaurant_id": restaurant.id,
-            "restaurant_name": restaurant.name,
-            "restaurant_slug": restaurant.slug,
-            "is_active": restaurant.is_active,
-            "owner": owner,
-        })
+        if owner_user is not None:
+            owner = RestaurantOwnerInfo(
+                user_id=owner_user.id,
+                name=owner_user.name,
+                phone=owner_user.phone,
+                email=owner_user.email,
+            )
 
-    return results
+        response.append(
+            AdminRestaurantOwnerResponse(
+                restaurant_id=restaurant.id,
+                restaurant_name=restaurant.name,
+                restaurant_slug=restaurant.slug,
+                is_active=restaurant.is_active,
+                owner=owner,
+            )
+        )
+
+    return response
 
 @router.get("/admin/{restaurant_slug}", response_model=RestaurantResponse)
 def get_restaurant_by_slug_admin(
