@@ -54,3 +54,30 @@ class RestaurantResponse(BaseModel):
     is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+class RestaurantOwnerInfo(BaseModel):
+    user_id: int
+    name: str
+    phone: str
+    email: str | None
+
+
+class AdminRestaurantOwnerResponse(BaseModel):
+    restaurant_id: int
+    restaurant_name: str
+    restaurant_slug: str
+    is_active: bool
+    owner: RestaurantOwnerInfo | None
+
+class DeliveryRestaurantInfo(BaseModel):
+    restaurant_id: int
+    restaurant_name: str
+    restaurant_slug: str
+
+
+class DeliveryPersonResponse(BaseModel):
+    user_id: int
+    name: str
+    phone: str
+    email: str | None = None
+    restaurants: list[DeliveryRestaurantInfo]
