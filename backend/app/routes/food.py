@@ -12,6 +12,7 @@ from app.services.food import(create_food as create_food_service,
                               update_food as update_food_service, 
                               delete_food as delete_food_service)
 from app.routes.dependencies import get_current_user, require_role, get_restaurant_membership
+from typing import Literal
 
 router = APIRouter(tags=["foods"])
 
@@ -22,6 +23,8 @@ def get_restaurant_foods(
     search: str | None = Query(default=None, min_length=1),
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
+    category: str | None = Query(default=None, min_length=1),
+    sort_by: Literal["price_asc", "price_desc"] | None = None,
 ):
     restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug, Restaurant.is_active == True).first()
     if restaurant is None:
@@ -30,7 +33,7 @@ def get_restaurant_foods(
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=422, detail="min_price cannot exceed max_price",)
 
-    return get_foods_service(db, restaurant.id, search=search, min_price=min_price, max_price=max_price)
+    return get_foods_service(db, restaurant.id, search=search, min_price=min_price, max_price=max_price, category=category, sort_by=sort_by)
 
 @router.get("/restaurants/{restaurant_slug}/foods/{food_id}", response_model=FoodResponse)
 def get_food(

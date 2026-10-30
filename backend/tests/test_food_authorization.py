@@ -389,3 +389,239 @@ def test_food_filter_rejects_invalid_price_range(client, db_session):
     )
 
     assert response.status_code == 422
+
+def test_food_category_filter_is_case_insensitive(client, db_session):
+    restaurant = Restaurant(name="Category Restaurant", slug="category-restaurant")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Chicken Burger", price=150, category="breakfast", restaurant_id=restaurant.id),
+        Food(name="Beef Burger", price=200, category="lunch", restaurant_id=restaurant.id),
+        Food(name="Pancake", price=100, category="breakfast", restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/category-restaurant/foods?category=BREAKFAST"
+    )
+
+    assert response.status_code == 200
+    assert {food["name"] for food in response.json()} == {
+        "Chicken Burger",
+        "Pancake",
+    }
+
+def test_food_category_and_price_filters_combine(client, db_session):
+    restaurant = Restaurant(name="Combined Category", slug="combined-category")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Chicken Burger", price=150, category="breakfast", restaurant_id=restaurant.id),
+        Food(name="Pancake", price=100, category="breakfast", restaurant_id=restaurant.id),
+        Food(name="Beef Burger", price=200, category="lunch", restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/combined-category/foods?category=breakfast&max_price=120"
+    )
+
+    assert response.status_code == 200
+    assert [food["name"] for food in response.json()] == ["Pancake"]
+
+def test_food_sort_by_price_ascending(client, db_session):
+    restaurant = Restaurant(name="Sorting Restaurant", slug="sorting-restaurant")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Pizza", price=250, restaurant_id=restaurant.id),
+        Food(name="Burger", price=150, restaurant_id=restaurant.id),
+        Food(name="Sandwich", price=100, restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/sorting-restaurant/foods?sort_by=price_asc"
+    )
+
+    assert response.status_code == 200
+    assert [food["name"] for food in response.json()] == [
+        "Sandwich", "Burger", "Pizza"
+    ]
+
+def test_food_sort_by_price_descending(client, db_session):
+    restaurant = Restaurant(name="Descending Restaurant", slug="descending-restaurant")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Pizza", price=250, restaurant_id=restaurant.id),
+        Food(name="Burger", price=150, restaurant_id=restaurant.id),
+        Food(name="Sandwich", price=100, restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/descending-restaurant/foods?sort_by=price_desc"
+    )
+
+    assert response.status_code == 200
+    assert [food["name"] for food in response.json()] == [
+        "Pizza", "Burger", "Sandwich"
+    ]
+
+
+def test_creating_food_with_category(client, db_session):
+    owner = create_user_service(
+        db_session,
+        "Category Owner",
+        "0911000050",
+        UserRole.restaurant_owner,
+        "StrongTestPassword123",
+    )
+    db_session.commit()
+
+    restaurant = Restaurant(
+        name="Category Restaurant",
+        slug="category-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.commit()
+
+    membership = RestaurantMembership(
+        user_id=owner.id,
+        restaurant_id=restaurant.id,
+        role="owner",
+    )
+    db_session.add(membership)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000050",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/restaurants/category-restaurant/foods",
+        json={"name": "Vegan Salad", "price": 12.50, "category": "vegan"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Vegan Salad"
+    assert response.json()["category"] == "vegan"
+
+def test_updating_food_category(client, db_session):
+    owner = create_user_service(
+        db_session,
+        "Update Category Owner",
+        "0911000060",
+        UserRole.restaurant_owner,
+        "StrongTestPassword123",
+    )
+    db_session.commit()
+
+    restaurant = Restaurant(
+        name="Update Category Restaurant",
+        slug="update-category-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.commit()
+
+    membership = RestaurantMembership(
+        user_id=owner.id,
+        restaurant_id=restaurant.id,
+        role="owner",
+    )
+    db_session.add(membership)
+    db_session.commit()
+
+    food = Food(name="Old Salad", price=10.00, category="salad", restaurant_id=restaurant.id)
+    db_session.add(food)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000060",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/update-category-restaurant/foods/{food.id}",
+        json={"category": "vegan"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["category"] == "vegan"
+
+def test_clearing_existing_food_category(client, db_session):
+    owner = create_user_service(
+        db_session,
+        "Null Category Owner",
+        "0911000070",
+        UserRole.restaurant_owner,
+        "StrongTestPassword123",
+    )
+    db_session.commit()
+
+    restaurant = Restaurant(
+        name="Null Category Restaurant",
+        slug="null-category-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.commit()
+
+    membership = RestaurantMembership(
+        user_id=owner.id,
+        restaurant_id=restaurant.id,
+        role="owner",
+    )
+    db_session.add(membership)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000070",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.post(
+        "/restaurants/null-category-restaurant/foods",
+        json={
+            "name": "Mystery Dish",
+            "price": 15.00,
+            "category": "salad",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["category"] == "salad"
+
+    food = response.json()
+
+    clear_response = client.patch(
+        f"/restaurants/null-category-restaurant/foods/{food['id']}",
+        json={"category": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert clear_response.status_code == 200
+    assert clear_response.json()["category"] is None

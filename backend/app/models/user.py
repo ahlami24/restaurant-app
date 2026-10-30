@@ -1,6 +1,6 @@
 from sqlalchemy import Integer, String, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.food import Base
+from app.models.base import Base
 from enum import Enum
 
 

@@ -1,6 +1,6 @@
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.food import Base
+from app.models.base import Base
 from sqlalchemy.orm import relationship
 
 class Customer(Base):
