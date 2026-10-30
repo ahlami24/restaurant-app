@@ -315,3 +315,77 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
         headers=headers,
     )
     assert response_c.status_code == 403
+
+def test_food_search_is_case_insensitive(client, db_session):
+    restaurant = Restaurant(name="Search Restaurant", slug="search-restaurant")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Chicken Burger", price=150, restaurant_id=restaurant.id),
+        Food(name="Cheese Pizza", price=250, restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/search-restaurant/foods?search=BURGER"
+    )
+
+    assert response.status_code == 200
+    assert [food["name"] for food in response.json()] == ["Chicken Burger"]
+
+
+def test_food_price_filter(client, db_session):
+    restaurant = Restaurant(name="Price Restaurant", slug="price-restaurant")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Cheap Meal", price=50, restaurant_id=restaurant.id),
+        Food(name="Medium Meal", price=150, restaurant_id=restaurant.id),
+        Food(name="Expensive Meal", price=300, restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/price-restaurant/foods?min_price=50&max_price=200"
+    )
+
+    assert response.status_code == 200
+    assert {food["name"] for food in response.json()} == {
+        "Cheap Meal",
+        "Medium Meal",
+    }
+
+
+def test_food_search_and_price_filters_combine(client, db_session):
+    restaurant = Restaurant(name="Combined Restaurant", slug="combined-restaurant")
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        Food(name="Chicken Burger", price=150, restaurant_id=restaurant.id),
+        Food(name="Beef Burger", price=300, restaurant_id=restaurant.id),
+        Food(name="Chicken Pizza", price=180, restaurant_id=restaurant.id),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/combined-restaurant/foods"
+        "?search=chicken&max_price=160"
+    )
+
+    assert response.status_code == 200
+    assert [food["name"] for food in response.json()] == ["Chicken Burger"]
+
+
+def test_food_filter_rejects_invalid_price_range(client, db_session):
+    restaurant = Restaurant(name="Range Restaurant", slug="range-restaurant")
+    db_session.add(restaurant)
+    db_session.commit()
+
+    response = client.get(
+        "/restaurants/range-restaurant/foods?min_price=300&max_price=100"
+    )
+
+    assert response.status_code == 422

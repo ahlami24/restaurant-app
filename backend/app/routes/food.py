@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import get_db
@@ -18,13 +18,19 @@ router = APIRouter(tags=["foods"])
 @router.get("/restaurants/{restaurant_slug}/foods", response_model=list[FoodResponse])
 def get_restaurant_foods(
     restaurant_slug: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    search: str | None = Query(default=None, min_length=1),
+    min_price: float | None = Query(default=None, ge=0),
+    max_price: float | None = Query(default=None, ge=0),
 ):
     restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug, Restaurant.is_active == True).first()
     if restaurant is None:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
-    return get_foods_service(db, restaurant.id)
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(status_code=422, detail="min_price cannot exceed max_price",)
+
+    return get_foods_service(db, restaurant.id, search=search, min_price=min_price, max_price=max_price)
 
 @router.get("/restaurants/{restaurant_slug}/foods/{food_id}", response_model=FoodResponse)
 def get_food(
