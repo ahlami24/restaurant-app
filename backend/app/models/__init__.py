@@ -5,3 +5,4 @@ from app.models.order import Order
 from app.models.customer import Customer
 from app.models.user import User, UserRole
 from app.models.restaurant import Restaurant, RestaurantMembership
+from app.models.delivery_person import DeliveryPerson

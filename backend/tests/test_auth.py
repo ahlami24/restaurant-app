@@ -132,7 +132,7 @@ def test_auth_me_with_expired_token_returns_401(client):
 
     expired_payload = {
         "sub": "1",
-        "role": "customer",
+        "role": "user",
         "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
     }
     expired_token = jwt.encode(
@@ -156,7 +156,7 @@ def test_auth_me_with_invalid_user_id_returns_401(client):
 
     payload = {
         "sub": "not-a-number",
-        "role": "customer",
+        "role": "user",
         "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

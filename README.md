@@ -104,19 +104,6 @@ The API should now be available at:
 
 ### 7. Create a restaurant-owner account (optional)
 
-To create an owner account, open another terminal, activate the virtual
-environment, and run these commands from the repository root:
-
-``` bash
-cd restaurant-app/backend
-source .venv/bin/activate
-python create_owner.py
-```
-
-On Windows PowerShell, activate the virtual environment with:
-
-``` powershell
-.venv\Scripts\Activate.ps1
 ```
 
 Follow the prompts to enter the owner's name, phone number, and

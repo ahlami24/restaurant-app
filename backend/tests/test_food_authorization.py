@@ -4,6 +4,7 @@ from app.services.user import create_user as create_user_service
 from app.models.food import Food
 from app.models.customer import Customer
 from app.models.order import Order
+from app.models.delivery_person import DeliveryPerson
 
 def test_customer_cannot_create_food(client, db_session):
     registration = client.post(
@@ -48,7 +49,7 @@ def test_restaurant_owner_can_create_food(client, db_session):
         db_session,
         "Test Owner",
         "0911000021",
-        UserRole.restaurant_owner,
+        UserRole.user,
         "StrongTestPassword123",
     )
     db_session.commit()
@@ -124,7 +125,14 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
         db_session,
         "Test Delivery Person",
         "0911000030",
-        UserRole.delivery_person,
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000031",
+        UserRole.user,
         "StrongTestPassword123",
     )
 
@@ -136,24 +144,23 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
         name="Other Restaurant",
         slug="other-restaurant",
     )
-    customer = Customer(
-        name="Test Customer",
-        phone="0911000031",
-    )
 
-    db_session.add_all([
-        assigned_restaurant,
-        other_restaurant,
-        customer,
-    ])
+    db_session.add_all([assigned_restaurant, other_restaurant])
     db_session.flush()
 
-    membership = RestaurantMembership(
-        user_id=delivery_person.id,
-        restaurant_id=assigned_restaurant.id,
-        role="delivery_person",
-    )
-    db_session.add(membership)
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_person.id)
+
+    db_session.add_all([
+        customer,
+        delivery_profile,
+        RestaurantMembership(
+            user_id=delivery_person.id,
+            restaurant_id=assigned_restaurant.id,
+            role="delivery_person",
+        ),
+    ])
+    db_session.flush()
 
     assigned_order = Order(
         customer_id=customer.id,
@@ -195,7 +202,7 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
     token = login.json()["access_token"]
 
     response = client.get(
-        "/orders",
+        "/delivery/orders",
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -204,6 +211,7 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
 
     assert [order["id"] for order in orders] == [assigned_order.id]
 
+
 def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
     client, db_session
 ):
@@ -211,7 +219,14 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
         db_session,
         "Multi Restaurant Delivery",
         "0911000040",
-        UserRole.delivery_person,
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000041",
+        UserRole.user,
         "StrongTestPassword123",
     )
 
@@ -227,20 +242,20 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
         name="Restaurant C",
         slug="restaurant-c",
     )
-    customer = Customer(
-        name="Test Customer",
-        phone="0911000041",
-    )
 
     db_session.add_all([
         restaurant_a,
         restaurant_b,
         restaurant_c,
-        customer,
     ])
     db_session.flush()
 
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_person.id)
+
     db_session.add_all([
+        customer,
+        delivery_profile,
         RestaurantMembership(
             user_id=delivery_person.id,
             restaurant_id=restaurant_a.id,
@@ -252,6 +267,7 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
             role="delivery_person",
         ),
     ])
+    db_session.flush()
 
     order_a = Order(
         customer_id=customer.id,
@@ -315,6 +331,10 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
         headers=headers,
     )
     assert response_c.status_code == 403
+
+    db_session.refresh(delivery_person)
+    assert delivery_person.role == UserRole.user
+    assert delivery_person.delivery_person is not None
 
 def test_food_search_is_case_insensitive(client, db_session):
     restaurant = Restaurant(name="Search Restaurant", slug="search-restaurant")
@@ -479,7 +499,7 @@ def test_creating_food_with_category(client, db_session):
         db_session,
         "Category Owner",
         "0911000050",
-        UserRole.restaurant_owner,
+        UserRole.user,
         "StrongTestPassword123",
     )
     db_session.commit()
@@ -524,7 +544,7 @@ def test_updating_food_category(client, db_session):
         db_session,
         "Update Category Owner",
         "0911000060",
-        UserRole.restaurant_owner,
+        UserRole.user,
         "StrongTestPassword123",
     )
     db_session.commit()
@@ -572,7 +592,7 @@ def test_clearing_existing_food_category(client, db_session):
         db_session,
         "Null Category Owner",
         "0911000070",
-        UserRole.restaurant_owner,
+        UserRole.user,
         "StrongTestPassword123",
     )
     db_session.commit()

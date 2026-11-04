@@ -15,7 +15,7 @@ def test_create_customer(client, db_session):
     assert response.status_code == 200
     assert response.json()["name"] == "Test Customer"
     assert response.json()["phone"] == "0911000001"
-    assert response.json()["role"] == "customer"
+    assert response.json()["role"] == "user"
 
     customer = (
         db_session.query(Customer)

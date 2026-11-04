@@ -5,6 +5,8 @@ from app.models.food import Food
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.restaurant import Restaurant
+from app.models.user import User, UserRole
+from app.services.auth import hash_password
 from app.services.order import update_order_items
 
 
@@ -20,10 +22,17 @@ def order_setup(db_session):
         slug="other-restaurant",
         is_active=True,
     )
-    customer = Customer(
+
+    user = User(
         name="Test Customer",
         phone="0912345678",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
     )
+    db_session.add(user)
+    db_session.flush()
+
+    customer = Customer(user_id=user.id)
 
     db_session.add_all([restaurant, other_restaurant, customer])
     db_session.flush()
@@ -61,6 +70,7 @@ def order_setup(db_session):
         OrderItem(food_id=food1.id, quantity=1, price=100),
         OrderItem(food_id=food2.id, quantity=1, price=200),
     ])
+
     db_session.commit()
 
     return {
