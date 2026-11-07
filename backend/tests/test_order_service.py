@@ -7,7 +7,7 @@ from app.models.order_item import OrderItem
 from app.models.restaurant import Restaurant
 from app.models.user import User, UserRole
 from app.services.auth import hash_password
-from app.services.order import update_order_items
+from app.services.order import update_order_items, update_order_status
 
 
 @pytest.fixture
@@ -157,4 +157,58 @@ def test_update_rejects_duplicate_food_ids(db_session, order_setup):
             data["order"].id,
             data["customer"].id,
             [duplicate_item, duplicate_item],
+        )
+
+def test_customer_can_cancel_own_pending_order(db_session, order_setup):
+    data = order_setup
+    updated = update_order_status(
+        db_session,
+        data["order"].id,
+        "cancelled",
+        actor_type="customer",
+        customer_id=data["customer"].id,
+    )
+    assert updated.status == "cancelled"
+
+
+def test_restaurant_owner_can_cancel_preparing_order(db_session, order_setup):
+    data = order_setup
+    data["order"].status = "preparing"
+    owner = User(
+        name="Restaurant Owner",
+        phone="0912345690",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    db_session.add(owner)
+    db_session.flush()
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner.id,
+            restaurant_id=data["restaurant"].id,
+            role="owner",
+        )
+    )
+    db_session.flush()
+
+    updated = update_order_status(
+        db_session,
+        data["order"].id,
+        "cancelled",
+        actor_type="restaurant",
+        restaurant_ids={data["restaurant"].id},
+    )
+    assert updated.status == "cancelled"
+
+
+def test_customer_cannot_cancel_preparing_order(db_session, order_setup):
+    data = order_setup
+    data["order"].status = "preparing"
+    with pytest.raises(ValueError, match="Cannot transition"):
+        update_order_status(
+            db_session,
+            data["order"].id,
+            "cancelled",
+            actor_type="customer",
+            customer_id=data["customer"].id,
         )
