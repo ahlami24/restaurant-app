@@ -1,4 +1,4 @@
-from datetime import timedelta, timezone, datetime
+from datetime import datetime, timedelta, timezone
 
 from app.services.auth import verify_password
 
@@ -118,6 +118,7 @@ def test_auth_me_with_invalid_token(client):
 
     assert response.status_code == 401
 
+
 def test_auth_me_without_token_returns_401(client):
     response = client.get("/auth/me")
 
@@ -179,7 +180,7 @@ def test_register_user_without_email(client):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["email"] is None
 
 
@@ -193,7 +194,7 @@ def test_register_duplicate_email_returns_400(client):
             "password": "StrongTestPassword123",
         },
     )
-    assert first_response.status_code == 200
+    assert first_response.status_code == 201
 
     second_response = client.post(
         "/users",
@@ -232,7 +233,7 @@ def test_register_duplicate_email_with_different_case_returns_400(client):
             "password": "StrongTestPassword123",
         },
     )
-    assert first_response.status_code == 200
+    assert first_response.status_code == 201
 
     second_response = client.post(
         "/users",

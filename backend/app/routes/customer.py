@@ -1,19 +1,23 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from app.database import get_db
 from app.models.customer import Customer
-from app.models.user import User, UserRole
-from app.models.restaurant import RestaurantMembership
 from app.models.order import Order
+from app.models.restaurant import RestaurantMembership
+from app.models.user import User, UserRole
 from app.routes.dependencies import get_current_user
 from app.schemas.customer import CustomerResponse, CustomerUpdate
 from app.services.customer import (
-    get_customers as get_customers_service,
     get_customer_by_id as get_customer_by_id_service,
+)
+from app.services.customer import (
+    get_customers as get_customers_service,
+)
+from app.services.customer import (
     update_customer as update_customer_service,
 )
 
@@ -68,17 +72,17 @@ def get_customers(
 
         if owner_membership is None:
             raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to list customers",
-        )
+                status_code=403,
+                detail="You do not have permission to list customers",
+            )
 
         restaurant_ids = (
-        db.query(RestaurantMembership.restaurant_id)
-        .filter(
-            RestaurantMembership.user_id == current_user.id,
-            RestaurantMembership.role == "owner",
-        )
-        .subquery()
+            db.query(RestaurantMembership.restaurant_id)
+            .filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role == "owner",
+            )
+            .subquery()
         )
 
         return (
@@ -89,7 +93,6 @@ def get_customers(
             .all()
         )
     except HTTPException:
-
         raise
     except SQLAlchemyError:
         logger.exception("Database error while retrieving customers")
