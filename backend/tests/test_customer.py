@@ -12,7 +12,7 @@ def test_create_customer(client, db_session):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["name"] == "Test Customer"
     assert response.json()["phone"] == "0911000001"
     assert response.json()["role"] == "user"
@@ -37,7 +37,7 @@ def test_get_customers(client, db_session):
             },
     )
 
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     admin = User(
         name="Test Admin",
@@ -69,7 +69,7 @@ def test_get_customer_by_id(client, db_session):
             "password": "test-password",
         },
     )
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     customer = (
         db_session.query(Customer)
@@ -140,7 +140,7 @@ def test_duplicate_phone_returns_400(client):
         },
     )
 
-    assert first_response.status_code == 200
+    assert first_response.status_code == 201
     assert second_response.status_code == 400
 
 
@@ -153,7 +153,7 @@ def test_update_customer(client, db_session):
             "password": "test-password",
         },
     )
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     customer = (
         db_session.query(Customer)
