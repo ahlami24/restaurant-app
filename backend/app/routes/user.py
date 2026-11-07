@@ -25,7 +25,7 @@ router = APIRouter(
 
 
 
-@router.post("", response_model=UserResponse)
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register_customer(
     user: UserCreate,
     db: Session = Depends(get_db),
@@ -147,6 +147,7 @@ def register_restaurant_owner(
         new_restaurant = Restaurant(
             name=registration.restaurant.name,
             slug=registration.restaurant.slug,
+            is_active=False,
         )
         db.add(new_restaurant)
         db.flush()
