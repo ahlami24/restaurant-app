@@ -196,7 +196,7 @@ def test_restaurant_owner_can_cancel_preparing_order(db_session, order_setup):
         data["order"].id,
         "cancelled",
         actor_type="restaurant",
-        restaurant_ids={data["restaurant"].id},
+        restaurant_ids={data["order"].restaurant_id},
     )
     assert updated.status == "cancelled"
 
