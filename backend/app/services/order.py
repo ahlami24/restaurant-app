@@ -4,19 +4,23 @@ from app.models.food import Food
 from app.models.order_item import OrderItem
 
 
-ALLOWED_TRANSITIONS = {
-    "pending": ["preparing", "cancelled"],
-    "preparing": ["ready"],
-    "ready": ["out_for_delivery"],
-    "out_for_delivery": ["delivered"],
-}
+from app.models.order import Order
+from app.models.customer import Customer
+from app.models.food import Food
+from app.models.order_item import OrderItem
 
-ALLOWED_ACTORS = {
-    "preparing": "restaurant",
-    "ready": "restaurant",
-    "out_for_delivery": "delivery_person",
-    "delivered": "delivery_person",
-    "cancelled": "customer",
+
+ALLOWED_TRANSITIONS = {
+    "pending": {
+        "preparing": {"restaurant"},
+        "cancelled": {"customer", "restaurant"},
+    },
+    "preparing": {
+        "ready": {"restaurant"},
+        "cancelled": {"restaurant"},
+    },
+    "ready": {"out_for_delivery": {"delivery_person"}},
+    "out_for_delivery": {"delivered": {"delivery_person"}},
 }
 
 
@@ -111,53 +115,24 @@ def update_order_status(
 ):
     if hasattr(new_status, "value"):
         new_status = new_status.value
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise ValueError(f"Order with id {order_id} does not exist")
 
-    order = db.query(Order).filter(
-        Order.id == order_id
-    ).first()
-
-    if not order:
-        raise ValueError(
-            f"Order with id {order_id} does not exist"
-        )
-
-    expected_actor = ALLOWED_ACTORS.get(new_status)
-
-    if expected_actor is None:
-        raise ValueError(
-            f"Unsupported order status: {new_status}"
-        )
-
-    if actor_type != expected_actor:
+    allowed_actors = ALLOWED_TRANSITIONS.get(order.status, {}).get(new_status)
+    if allowed_actors is None:
+        raise ValueError(f"Cannot transition from '{order.status}' to '{new_status}'")
+    if actor_type not in allowed_actors:
         raise PermissionError(
-            f"This action requires {expected_actor} authorization"
+            f"This action requires one of these roles: {', '.join(sorted(allowed_actors))}"
         )
 
     if actor_type == "customer":
         if order.customer_id != customer_id:
-            raise PermissionError(
-                "You do not have permission to update this order"
-            )
-
+            raise PermissionError("You do not have permission to update this order")
     elif actor_type in ("restaurant", "delivery_person"):
         if not restaurant_ids or order.restaurant_id not in restaurant_ids:
-            raise PermissionError(
-                "You do not have permission to update this order"
-            )
-
-    current_status = order.status
-
-    if current_status not in ALLOWED_TRANSITIONS:
-        raise ValueError(
-            f"Current status '{current_status}' is not valid for transition"
-        )
-
-    allowed_next_status = ALLOWED_TRANSITIONS[current_status]
-
-    if new_status not in allowed_next_status:
-        raise ValueError(
-            f"Cannot transition from '{current_status}' to '{new_status}'"
-        )
+            raise PermissionError("You do not have permission to update this order")
 
     order.status = new_status
     return order
