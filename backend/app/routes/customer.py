@@ -143,7 +143,11 @@ def get_customer_by_id(
         )
 
 
-@router.put("/customers/{customer_id}", response_model=CustomerResponse)
+@router.put(
+    "/customers/{customer_id}",
+    response_model=CustomerResponse,
+    description="Changing phone also changes the phone number used to sign in.",
+)
 def update_customer(
     customer_id: int,
     customer_update: CustomerUpdate,
