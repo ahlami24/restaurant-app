@@ -179,6 +179,7 @@ def test_restaurant_owner_registration_creates_all_records(
     assert data["user"]["role"] == UserRole.user.value
     assert data["user"]["email"] == "owner@example.com"
     assert data["restaurant"]["slug"] == "new-restaurant"
+    assert data["restaurant"]["is_active"] is False
 
     user = db_session.query(User).filter_by(id=user_id).first()
     assert user is not None
