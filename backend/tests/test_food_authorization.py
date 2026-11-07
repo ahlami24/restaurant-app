@@ -15,7 +15,7 @@ def test_customer_cannot_create_food(client, db_session):
             "password": "StrongTestPassword123",
         },
     )
-    assert registration.status_code == 200
+    assert registration.status_code == 201
     restaurant = Restaurant(
         name="Test Restaurant",
         slug="test-restaurant",
