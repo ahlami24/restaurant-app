@@ -185,7 +185,7 @@ def test_restaurant_owner_can_cancel_preparing_order(db_session, order_setup):
     db_session.add(
         RestaurantMembership(
             user_id=owner.id,
-            restaurant_id=data["restaurant"].id,
+            restaurant_id=data["order"].restaurant_id,
             role="owner",
         )
     )
