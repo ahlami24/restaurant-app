@@ -102,25 +102,20 @@ The API should now be available at:
 -   Interactive API docs: http://127.0.0.1:8000/docs
 -   Alternative API docs: http://127.0.0.1:8000/redoc
 
-### 7. Create a restaurant-owner account (optional)
+### 7. Register users and create a platform administrator
 
-To create an owner account, open another terminal, activate the virtual
-environment, and run these commands from the repository root:
+Customers register through `POST /users`.
 
-``` bash
-cd restaurant-app/backend
-source .venv/bin/activate
-python create_owner.py
+Restaurant owners can register through `POST /users/restaurant-owner`.
+Newly registered restaurants remain inactive until a platform administrator
+reviews and activates them.
+
+To create the initial platform administrator, run this from the `backend`
+directory:
+
+```bash
+python scripts/create_platform_admin.py
 ```
-
-On Windows PowerShell, activate the virtual environment with:
-
-``` powershell
-.venv\Scripts\Activate.ps1
-```
-
-Follow the prompts to enter the owner's name, phone number, and
-password.
 
 ## Troubleshooting
 

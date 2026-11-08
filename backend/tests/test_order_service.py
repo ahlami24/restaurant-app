@@ -4,8 +4,10 @@ from app.models.customer import Customer
 from app.models.food import Food
 from app.models.order import Order
 from app.models.order_item import OrderItem
-from app.models.restaurant import Restaurant
-from app.services.order import update_order_items
+from app.models.restaurant import Restaurant, RestaurantMembership
+from app.models.user import User, UserRole
+from app.services.auth import hash_password
+from app.services.order import update_order_items, update_order_status
 
 
 @pytest.fixture
@@ -20,10 +22,17 @@ def order_setup(db_session):
         slug="other-restaurant",
         is_active=True,
     )
-    customer = Customer(
+
+    user = User(
         name="Test Customer",
         phone="0912345678",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
     )
+    db_session.add(user)
+    db_session.flush()
+
+    customer = Customer(user_id=user.id)
 
     db_session.add_all([restaurant, other_restaurant, customer])
     db_session.flush()
@@ -57,10 +66,13 @@ def order_setup(db_session):
     db_session.add(order)
     db_session.flush()
 
-    order.order_items.extend([
-        OrderItem(food_id=food1.id, quantity=1, price=100),
-        OrderItem(food_id=food2.id, quantity=1, price=200),
-    ])
+    order.order_items.extend(
+        [
+            OrderItem(food_id=food1.id, quantity=1, price=100),
+            OrderItem(food_id=food2.id, quantity=1, price=200),
+        ]
+    )
+
     db_session.commit()
 
     return {
@@ -72,9 +84,7 @@ def order_setup(db_session):
     }
 
 
-def test_update_rejects_food_from_another_restaurant(
-    db_session, order_setup
-):
+def test_update_rejects_food_from_another_restaurant(db_session, order_setup):
     data = order_setup
 
     with pytest.raises(ValueError, match="does not exist in this restaurant"):
@@ -83,10 +93,14 @@ def test_update_rejects_food_from_another_restaurant(
             data["order"].id,
             data["customer"].id,
             [
-                type("Item", (), {
-                    "food_id": data["foreign_food"].id,
-                    "quantity": 1,
-                })()
+                type(
+                    "Item",
+                    (),
+                    {
+                        "food_id": data["foreign_food"].id,
+                        "quantity": 1,
+                    },
+                )()
             ],
         )
 
@@ -99,10 +113,14 @@ def test_update_removes_omitted_items(db_session, order_setup):
         data["order"].id,
         data["customer"].id,
         [
-            type("Item", (), {
-                "food_id": data["food1"].id,
-                "quantity": 2,
-            })()
+            type(
+                "Item",
+                (),
+                {
+                    "food_id": data["food1"].id,
+                    "quantity": 2,
+                },
+            )()
         ],
     )
 
@@ -119,14 +137,22 @@ def test_update_recalculates_total(db_session, order_setup):
         data["order"].id,
         data["customer"].id,
         [
-            type("Item", (), {
-                "food_id": data["food1"].id,
-                "quantity": 3,
-            })(),
-            type("Item", (), {
-                "food_id": data["food2"].id,
-                "quantity": 2,
-            })(),
+            type(
+                "Item",
+                (),
+                {
+                    "food_id": data["food1"].id,
+                    "quantity": 3,
+                },
+            )(),
+            type(
+                "Item",
+                (),
+                {
+                    "food_id": data["food2"].id,
+                    "quantity": 2,
+                },
+            )(),
         ],
     )
 
@@ -136,10 +162,14 @@ def test_update_recalculates_total(db_session, order_setup):
 def test_update_rejects_duplicate_food_ids(db_session, order_setup):
     data = order_setup
 
-    duplicate_item = type("Item", (), {
-        "food_id": data["food1"].id,
-        "quantity": 1,
-    })()
+    duplicate_item = type(
+        "Item",
+        (),
+        {
+            "food_id": data["food1"].id,
+            "quantity": 1,
+        },
+    )()
 
     with pytest.raises(ValueError, match="Duplicate food_id"):
         update_order_items(
@@ -147,4 +177,59 @@ def test_update_rejects_duplicate_food_ids(db_session, order_setup):
             data["order"].id,
             data["customer"].id,
             [duplicate_item, duplicate_item],
+        )
+
+
+def test_customer_can_cancel_own_pending_order(db_session, order_setup):
+    data = order_setup
+    updated = update_order_status(
+        db_session,
+        data["order"].id,
+        "cancelled",
+        actor_type="customer",
+        customer_id=data["customer"].id,
+    )
+    assert updated.status == "cancelled"
+
+
+def test_restaurant_owner_can_cancel_preparing_order(db_session, order_setup):
+    data = order_setup
+    data["order"].status = "preparing"
+    owner = User(
+        name="Restaurant Owner",
+        phone="0912345690",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    db_session.add(owner)
+    db_session.flush()
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner.id,
+            restaurant_id=data["order"].restaurant_id,
+            role="owner",
+        )
+    )
+    db_session.flush()
+
+    updated = update_order_status(
+        db_session,
+        data["order"].id,
+        "cancelled",
+        actor_type="restaurant",
+        restaurant_ids={data["order"].restaurant_id},
+    )
+    assert updated.status == "cancelled"
+
+
+def test_customer_cannot_cancel_preparing_order(db_session, order_setup):
+    data = order_setup
+    data["order"].status = "preparing"
+    with pytest.raises(PermissionError, match="requires one of these roles"):
+        update_order_status(
+            db_session,
+            data["order"].id,
+            "cancelled",
+            actor_type="customer",
+            customer_id=data["customer"].id,
         )

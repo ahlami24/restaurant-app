@@ -1,4 +1,4 @@
-from datetime import timedelta, timezone, datetime
+from datetime import datetime, timedelta, timezone
 
 from app.services.auth import verify_password
 
@@ -18,7 +18,7 @@ def register_user(client):
 def test_register_user(client):
     response = register_user(client)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["name"] == "Test User"
     assert response.json()["email"] == "test@example.com"
     assert "password" not in response.json()
@@ -27,7 +27,7 @@ def test_register_user(client):
 
 def test_login_with_phone(client):
     register_response = register_user(client)
-    assert register_response.status_code == 200
+    assert register_response.status_code == 201
 
     response = client.post(
         "/auth/login",
@@ -44,7 +44,7 @@ def test_login_with_phone(client):
 
 def test_login_with_email(client):
     register_response = register_user(client)
-    assert register_response.status_code == 200
+    assert register_response.status_code == 201
 
     response = client.post(
         "/auth/login",
@@ -60,7 +60,7 @@ def test_login_with_email(client):
 
 def test_login_with_wrong_password(client):
     register_response = register_user(client)
-    assert register_response.status_code == 200
+    assert register_response.status_code == 201
 
     response = client.post(
         "/auth/login",
@@ -87,7 +87,7 @@ def test_password_hash_verification():
 
 def test_auth_me_with_valid_token(client):
     register_response = register_user(client)
-    assert register_response.status_code == 200
+    assert register_response.status_code == 201
 
     login_response = client.post(
         "/auth/login",
@@ -118,6 +118,7 @@ def test_auth_me_with_invalid_token(client):
 
     assert response.status_code == 401
 
+
 def test_auth_me_without_token_returns_401(client):
     response = client.get("/auth/me")
 
@@ -132,7 +133,7 @@ def test_auth_me_with_expired_token_returns_401(client):
 
     expired_payload = {
         "sub": "1",
-        "role": "customer",
+        "role": "user",
         "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
     }
     expired_token = jwt.encode(
@@ -156,7 +157,7 @@ def test_auth_me_with_invalid_user_id_returns_401(client):
 
     payload = {
         "sub": "not-a-number",
-        "role": "customer",
+        "role": "user",
         "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -179,7 +180,7 @@ def test_register_user_without_email(client):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["email"] is None
 
 
@@ -193,7 +194,7 @@ def test_register_duplicate_email_returns_400(client):
             "password": "StrongTestPassword123",
         },
     )
-    assert first_response.status_code == 200
+    assert first_response.status_code == 201
 
     second_response = client.post(
         "/users",
@@ -232,7 +233,7 @@ def test_register_duplicate_email_with_different_case_returns_400(client):
             "password": "StrongTestPassword123",
         },
     )
-    assert first_response.status_code == 200
+    assert first_response.status_code == 201
 
     second_response = client.post(
         "/users",
@@ -249,7 +250,7 @@ def test_register_duplicate_email_with_different_case_returns_400(client):
 
 def test_login_with_legacy_phone_field(client):
     register_response = register_user(client)
-    assert register_response.status_code == 200
+    assert register_response.status_code == 201
 
     response = client.post(
         "/auth/login",
