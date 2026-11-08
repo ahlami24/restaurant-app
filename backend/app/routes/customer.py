@@ -1,22 +1,23 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from app.database import get_db
 from app.models.customer import Customer
-from app.models.user import User, UserRole
-from app.models.restaurant import RestaurantMembership
 from app.models.order import Order
+from app.models.restaurant import RestaurantMembership
+from app.models.user import User, UserRole
 from app.routes.dependencies import get_current_user
-from app.schemas.customer import (
-    CustomerResponse,
-    CustomerUpdate,
+from app.schemas.customer import CustomerResponse, CustomerUpdate
+from app.services.customer import (
+    get_customer_by_id as get_customer_by_id_service,
 )
 from app.services.customer import (
     get_customers as get_customers_service,
-    get_customer_by_id as get_customer_by_id_service,
+)
+from app.services.customer import (
     update_customer as update_customer_service,
 )
 
@@ -24,17 +25,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
 def customer_belongs_to_owner_restaurant(
-        db: Session,
-        owner_id: int,
-        customer_id: int
+    db: Session,
+    owner_id: int,
+    customer_id: int,
 ) -> bool:
     restaurant_ids = (
-
         db.query(RestaurantMembership.restaurant_id)
         .filter(
             RestaurantMembership.user_id == owner_id,
-            RestaurantMembership.role == "owner"
+            RestaurantMembership.role == "owner",
         )
         .subquery()
     )
@@ -43,12 +44,13 @@ def customer_belongs_to_owner_restaurant(
         db.query(Order.id)
         .filter(
             Order.customer_id == customer_id,
-            Order.restaurant_id.in_(restaurant_ids)
+            Order.restaurant_id.in_(restaurant_ids),
         )
         .first()
     )
 
     return order_exists is not None
+
 
 @router.get("/customers", response_model=list[CustomerResponse])
 def get_customers(
@@ -58,31 +60,40 @@ def get_customers(
     try:
         if current_user.role == UserRole.platform_admin:
             return get_customers_service(db)
-        if current_user.role == UserRole.restaurant_owner:
-            restaurant_ids = (
-                db.query(RestaurantMembership.restaurant_id)
-                .filter(
-                    RestaurantMembership.user_id == current_user.id,
-                    RestaurantMembership.role == "owner"
-                )
-                .subquery()
-            )
 
-            return (
-                db.query(Customer)
-                .join(Order, Customer.id == Order.customer_id)
-                .filter(Order.restaurant_id.in_(restaurant_ids))
-                .distinct()
-                .all()
+        owner_membership = (
+            db.query(RestaurantMembership.id)
+            .filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role == "owner",
             )
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to list customers",
+            .first()
         )
 
+        if owner_membership is None:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to list customers",
+            )
+
+        restaurant_ids = (
+            db.query(RestaurantMembership.restaurant_id)
+            .filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role == "owner",
+            )
+            .subquery()
+        )
+
+        return (
+            db.query(Customer)
+            .join(Order, Customer.id == Order.customer_id)
+            .filter(Order.restaurant_id.in_(restaurant_ids))
+            .distinct()
+            .all()
+        )
     except HTTPException:
         raise
-
     except SQLAlchemyError:
         logger.exception("Database error while retrieving customers")
         raise HTTPException(
@@ -109,26 +120,16 @@ def get_customer_by_id(
         if current_user.role == UserRole.platform_admin:
             return customer
 
-        if current_user.role == UserRole.customer:
-            if customer.user_id != current_user.id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have permission to view this customer",
-                )
+        # Customer capability is determined by the profile.
+        if customer.user_id == current_user.id:
             return customer
 
-        if current_user.role == UserRole.restaurant_owner:
-            if customer_belongs_to_owner_restaurant(
-                db,
-                current_user.id,
-                customer.id,
-            ):
-                return customer
-
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to view this customer",
-            )
+        if customer_belongs_to_owner_restaurant(
+            db,
+            current_user.id,
+            customer.id,
+        ):
+            return customer
 
         raise HTTPException(
             status_code=403,
@@ -137,7 +138,6 @@ def get_customer_by_id(
 
     except HTTPException:
         raise
-
     except SQLAlchemyError:
         logger.exception("Database error while retrieving customer")
         raise HTTPException(
@@ -146,7 +146,11 @@ def get_customer_by_id(
         )
 
 
-@router.put("/customers/{customer_id}", response_model=CustomerResponse)
+@router.put(
+    "/customers/{customer_id}",
+    response_model=CustomerResponse,
+    description="Changing phone also changes the phone number used to sign in.",
+)
 def update_customer(
     customer_id: int,
     customer_update: CustomerUpdate,
@@ -162,10 +166,7 @@ def update_customer(
                 detail="Customer not found",
             )
 
-        if (
-            current_user.role != UserRole.customer
-            or existing_customer.user_id != current_user.id
-        ):
+        if existing_customer.user_id != current_user.id:
             raise HTTPException(
                 status_code=403,
                 detail="You do not have permission to update this customer",
@@ -185,14 +186,12 @@ def update_customer(
     except HTTPException:
         db.rollback()
         raise
-
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=400,
             detail="Phone number already exists",
         )
-
     except SQLAlchemyError:
         db.rollback()
         logger.exception("Database error while updating customer")

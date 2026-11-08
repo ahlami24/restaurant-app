@@ -8,6 +8,7 @@ from pydantic import (
 )
 
 from app.models.user import UserRole
+from app.schemas.restaurant import RestaurantCreate, RestaurantResponse
 
 class UserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -26,8 +27,6 @@ class UserCreate(BaseModel):
         if not value:
             return None
         return value.lower()
-
-
 
 class UserResponse(BaseModel):
     id: int
@@ -50,3 +49,13 @@ class LoginRequest(BaseModel):
             if "phone" in value and "identifier" not in value:
                 value["identifier"] = value.pop("phone")
         return value
+class RestaurantOwnerRegistration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user: UserCreate
+    restaurant: RestaurantCreate
+
+
+class RestaurantOwnerRegistrationResponse(BaseModel):
+    user: UserResponse
+    restaurant: RestaurantResponse
