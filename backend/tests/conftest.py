@@ -13,6 +13,8 @@ from app.models import (
     order,  # noqa: F401
     order_item,  # noqa: F401
     restaurant,  # noqa: F401
+)
+from app.models import (
     user as user_model,  # noqa: F401
 )
 from app.models.base import Base
