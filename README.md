@@ -1,138 +1,279 @@
 # Restaurant Management API
 
-A restaurant management backend built with **FastAPI**, **PostgreSQL**,
-and **SQLAlchemy**.
+A RESTful backend API for managing a multi-restaurant food ordering platform. Built with **FastAPI** and **PostgreSQL**, the application provides authentication, role-based access control, restaurant and menu management, order processing, and delivery-person management.
+
+The project is designed around multiple user roles and restaurant ownership, with a centralized platform administrator responsible for managing the platform.
 
 ## Features
 
--   User registration and authentication
--   JWT-based authentication
--   Role-based access for customers, restaurant owners, and delivery
-    personnel
--   Customer management
--   Food menu management
--   Order creation and management
--   Order status updates
--   Database migrations with Alembic
+### Authentication and User Management
+- User registration and authentication.
+- JWT-based authentication.
+- Secure password hashing.
+- Role-based access control.
+- Support for customers, restaurant owners, delivery personnel, and platform administrators.
+- User profile management.
 
-## Technologies
+### Restaurant Management
+- Restaurant registration and management.
+- Restaurant owner assignment.
+- Restaurant activation and deactivation.
+- Restaurant-specific access control.
+- Platform administrator access to restaurant information and ownership details.
+- Database-level enforcement of one owner per restaurant.
 
--   Python
--   FastAPI
--   PostgreSQL
--   SQLAlchemy
--   Alembic
--   JWT authentication
+### Menu Management
+- Food item creation and management.
+- Restaurant-specific food menus.
+- Food categorization.
+- Food pricing and descriptions.
 
-## Prerequisites
+### Order Management
+- Customer order creation.
+- Order item and quantity management.
+- Automatic order total calculation.
+- Order updates and status management.
+- Restaurant-specific order management.
 
-Install the following before starting:
+### Delivery Management
+- Delivery-person management.
+- Assignment of delivery personnel to restaurants.
+- Access control for delivery-related operations.
+- Support for delivery personnel working with multiple restaurants.
 
--   Python 3.10 or newer
--   PostgreSQL
--   Git
+### Database and Testing
+- PostgreSQL relational database.
+- SQLAlchemy ORM for database operations.
+- Alembic database migrations.
+- Automated tests with pytest.
+- Code quality checks with Ruff.
+- GitHub Actions continuous integration.
 
-## Setup and Installation
+## Technology Stack
 
-### 1. Clone the repository
+| Technology | Purpose |
+|---|---|
+| Python | Backend programming language |
+| FastAPI | REST API framework |
+| PostgreSQL | Relational database |
+| SQLAlchemy | Database ORM |
+| Alembic | Database migrations |
+| Pydantic | Data validation and serialization |
+| JWT | Authentication and access tokens |
+| pwdlib | Password hashing |
+| Uvicorn | ASGI application server |
+| pytest | Automated testing |
+| Ruff | Code linting and formatting |
+| GitHub Actions | Continuous integration |
 
-``` bash
+## Project Structure
+
+The backend follows a modular structure that separates API routes, database models, schemas, and business logic.
+
+```text
+restaurant-app/
+│
+├── backend/
+│   ├── app/
+│   │   ├── models/        # Database models
+│   │   ├── routes/        # API endpoints
+│   │   ├── schemas/       # Request and response schemas
+│   │   ├── services/      # Business logic
+│   │   ├── database.py    # Database configuration
+│   │   └── main.py        # FastAPI application entry point
+│   │
+│   ├── alembic/           # Database migrations
+│   ├── scripts/           # Administrative scripts
+│   ├── tests/             # Automated tests
+│   ├── requirements.txt
+│   └── .env.example
+│
+└── README.md
+```
+
+## Getting Started
+
+Follow these instructions to set up the project locally.
+
+### Prerequisites
+
+Make sure you have the following installed:
+
+- Python 3.10 or newer
+- PostgreSQL
+- Git
+- pip
+
+### 1. Clone the Repository
+
+```bash
 git clone https://github.com/ahlami24/restaurant-app.git
 cd restaurant-app/backend
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Create a Virtual Environment
 
-Linux or macOS:
+**Linux / macOS**
 
-``` bash
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Windows PowerShell:
+**Windows PowerShell**
 
-``` powershell
+```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-### 3. Install dependencies
+### 3. Install Dependencies
 
-``` bash
+```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure PostgreSQL and environment variables
+### 4. Configure Environment Variables
 
-Create a PostgreSQL database (for example, `restaurant_db`).
+Create a PostgreSQL database:
 
-Create a file named `.env` inside the `backend` directory with the
-following variables. Replace the example values with your own PostgreSQL
-username and password, and generate a strong secret key.
+```sql
+CREATE DATABASE restaurant_db;
+```
 
-``` env
-DATABASE_URL=postgresql://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/restaurant_db
+Create a `.env` file inside the `backend/` directory:
+
+```env
+DATABASE_URL=postgresql+psycopg2://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/restaurant_db
 SECRET_KEY=YOUR_SECRET_KEY
 ```
 
-Do not commit `.env` to Git. Keep database credentials and secret keys
-private.
+Replace the example credentials with your actual PostgreSQL credentials and use a strong, randomly generated secret key.
 
-### 5. Run database migrations
+**Important:** Never commit your `.env` file or expose database credentials and secret keys. The repository includes `.env.example` as a configuration reference.
 
-Make sure PostgreSQL is running and your `.env` file is configured. From
-the `backend` directory, run:
+### 5. Run Database Migrations
 
-``` bash
+Make sure PostgreSQL is running and your environment variables are configured.
+
+From the `backend/` directory:
+
+```bash
 alembic upgrade head
 ```
 
-### 6. Start the API server
+This applies all available database migrations and creates the required database schema.
 
-From the `backend` directory, run:
+### 6. Start the Application
 
-``` bash
+Run the development server:
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-The API should now be available at:
+The API will be available at:
 
--   API base URL: http://127.0.0.1:8000
--   Interactive API docs: http://127.0.0.1:8000/docs
--   Alternative API docs: http://127.0.0.1:8000/redoc
+| Resource | URL |
+|---|---|
+| API Base URL | http://127.0.0.1:8000 |
+| Swagger UI | http://127.0.0.1:8000/docs |
+| ReDoc | http://127.0.0.1:8000/redoc |
 
-### 7. Register users and create a platform administrator
+You can use Swagger UI to explore and interact with the available API endpoints.
 
-Customers register through `POST /users`.
+### 7. Create the Initial Platform Administrator
 
-Restaurant owners can register through `POST /users/restaurant-owner`.
-Newly registered restaurants remain inactive until a platform administrator
-reviews and activates them.
+The application provides a script for creating the initial platform administrator.
 
-To create the initial platform administrator, run this from the `backend`
-directory:
+From the `backend/` directory, run:
 
 ```bash
 python scripts/create_platform_admin.py
 ```
 
-## Troubleshooting
+Follow the script's prompts to create the administrator account.
 
--   **Database connection errors:** Check that PostgreSQL is running and
-    that `DATABASE_URL` matches your database name, username, password,
-    host, and port.
--   **Missing dependencies:** Confirm the virtual environment is active,
-    then run `pip install -r requirements.txt`.
--   **Missing environment variables:** Confirm `backend/.env` contains
-    both `DATABASE_URL` and `SECRET_KEY`.
+## Running Tests
 
-## Security Notes
+The project uses pytest for automated testing.
 
--   Never commit `.env` or other files containing credentials.
--   Use a strong, private `SECRET_KEY`.
--   Use a separate database for development and production.
+From the `backend/` directory:
 
-## Repository
+```bash
+python -m pytest -q
+```
 
-GitHub: https://github.com/ahlami24/restaurant-app
+To run tests with more detailed output:
+
+```bash
+python -m pytest -v
+```
+
+## Code Quality
+
+Ruff is used to check code quality and import organization.
+
+```bash
+ruff check .
+```
+
+To check and automatically fix supported linting issues:
+
+```bash
+ruff check --fix .
+```
+
+Review the proposed changes before committing them.
+
+## Database Migrations
+
+Alembic manages database schema changes.
+
+Apply all migrations:
+
+```bash
+alembic upgrade head
+```
+
+Create a new migration:
+
+```bash
+alembic revision --autogenerate -m "describe your changes"
+```
+
+Review generated migrations before applying them.
+
+## Security Considerations
+
+- Passwords are stored using secure password hashing.
+- Protected endpoints require valid authentication.
+- Role-based authorization restricts access to sensitive operations.
+- Database credentials and secret keys are stored in environment variables.
+- `.env` files must not be committed to version control.
+- Database constraints enforce important data integrity rules.
+
+## Continuous Integration
+
+GitHub Actions is used to automatically verify changes through the project's CI workflow.
+
+The workflow runs automated tests and code quality checks to help maintain code reliability and consistency.
+
+## Contributing
+
+Contributions, suggestions, and improvements are welcome.
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Implement your changes.
+4. Add or update tests where appropriate.
+5. Run the test suite and code quality checks.
+6. Submit a pull request describing your changes.
+
+## Project Repository
+
+**GitHub:** https://github.com/ahlami24/restaurant-app
+
+---
+
+*Built with FastAPI and PostgreSQL.*
