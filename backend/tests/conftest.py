@@ -6,16 +6,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import get_db
 from app.main import app
-from app.models.base import Base
 from app.models import (
-    customer,
-    delivery_person,
-    food,
-    order,
-    order_item,
-    restaurant,
-    user,
+    customer,  # noqa: F401
+    delivery_person,  # noqa: F401
+    food,  # noqa: F401
+    order,  # noqa: F401
+    order_item,  # noqa: F401
+    restaurant,  # noqa: F401
+    user as user_model,  # noqa: F401
 )
+from app.models.base import Base
 from app.models.user import User, UserRole
 from app.services.auth import create_access_token, hash_password
 
