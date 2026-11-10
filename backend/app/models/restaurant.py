@@ -1,13 +1,15 @@
 from sqlalchemy import (
-    Integer,
-    String,
     Boolean,
     ForeignKey,
+    Index,
+    Integer,
+    String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.food import Base
+from app.models.base import Base
 
 
 class Restaurant(Base):
@@ -36,6 +38,13 @@ class RestaurantMembership(Base):
         UniqueConstraint(
             "user_id", "restaurant_id",
             name="uq_user_restaurant_membership",
+        ),
+        Index(
+            "uq_restaurant_single_owner",
+            "restaurant_id",
+            unique=True,
+            postgresql_where=text("role = 'owner'"),
+            sqlite_where=text("role = 'owner'"),
         ),
     )
 

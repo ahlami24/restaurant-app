@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
+from app.models.delivery_person import DeliveryPerson
 from app.database import get_db
 from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import User, UserRole
@@ -16,10 +16,11 @@ from app.schemas.restaurant import (
     RestaurantCreate,
     RestaurantOwnerAssign,
     RestaurantResponse,
-    AdminRestaurantOwnerResponse,
     RestaurantOwnerInfo,
-    DeliveryPersonResponse,
+    AdminRestaurantOwnerResponse,
     DeliveryRestaurantInfo,
+    DeliveryPersonResponse,
+
 )
 from app.services.restaurant import (
     get_restaurants as get_restaurants_service,
@@ -49,10 +50,7 @@ def get_restaurants_with_owners(
     admin: User = Depends(require_platform_admin),
 ):
     restaurants = (
-        db.query(
-            Restaurant,
-            User,
-        )
+        db.query(Restaurant, User)
         .outerjoin(
             RestaurantMembership,
             (Restaurant.id == RestaurantMembership.restaurant_id)
@@ -99,21 +97,16 @@ def get_all_delivery_persons(
     db: Session = Depends(get_db),
     admin: User = Depends(require_platform_admin),
 ):
-    rows = (
-        db.query(User, Restaurant)
-        .outerjoin(
-            RestaurantMembership,
-            (User.id == RestaurantMembership.user_id)
-            & (RestaurantMembership.role == "delivery_person"),
-        )
-        .outerjoin(
-            Restaurant,
-            Restaurant.id == RestaurantMembership.restaurant_id,
-        )
-        .filter(User.role == UserRole.delivery_person)
-        .order_by(User.id, Restaurant.id)
-        .all()
-    )
+    rows = db.query(User, Restaurant).join(
+        DeliveryPerson, DeliveryPerson.user_id == User.id
+    ).outerjoin(
+        RestaurantMembership,
+        (RestaurantMembership.user_id == User.id)
+        & (RestaurantMembership.role == "delivery_person"),
+    ).outerjoin(
+        Restaurant,
+        Restaurant.id == RestaurantMembership.restaurant_id,
+    ).order_by(User.id, Restaurant.id).all()
 
     delivery_people = {}
 
@@ -138,6 +131,71 @@ def get_all_delivery_persons(
 
     return list(delivery_people.values())
 
+@router.get(
+    "/{restaurant_id}/delivery-persons",
+    response_model=list[DeliveryPersonResponse],
+)
+def get_owner_restaurant_delivery_persons(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.id == restaurant_id
+    ).first()
+
+    if restaurant is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Restaurant not found",
+        )
+
+    owner_membership = db.query(RestaurantMembership).filter(
+        RestaurantMembership.restaurant_id == restaurant.id,
+        RestaurantMembership.user_id == current_user.id,
+        RestaurantMembership.role == "owner",
+    ).first()
+
+    if owner_membership is None:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view delivery persons for this restaurant",
+        )
+
+    delivery_persons = (
+        db.query(User)
+        .join(
+            DeliveryPerson,
+            DeliveryPerson.user_id == User.id,
+        )
+        .join(
+            RestaurantMembership,
+            RestaurantMembership.user_id == User.id,
+        )
+        .filter(
+            RestaurantMembership.restaurant_id == restaurant.id,
+            RestaurantMembership.role == "delivery_person",
+        )
+        .order_by(User.id)
+        .all()
+    )
+
+    return [
+        DeliveryPersonResponse(
+            user_id=user.id,
+            name=user.name,
+            phone=user.phone,
+            email=user.email,
+            restaurants=[
+                DeliveryRestaurantInfo(
+                    restaurant_id=restaurant.id,
+                    restaurant_name=restaurant.name,
+                    restaurant_slug=restaurant.slug,
+                )
+            ],
+        )
+        for user in delivery_persons
+    ]
 @router.get("/admin/{restaurant_slug}", response_model=RestaurantResponse)
 def get_restaurant_by_slug_admin(
     restaurant_slug: str,
@@ -225,10 +283,10 @@ def assign_restaurant_owner(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if user.role in (UserRole.platform_admin, UserRole.delivery_person):
+    if user.role == UserRole.platform_admin:
         raise HTTPException(
             status_code=400,
-            detail="This user cannot be assigned as a restaurant owner",
+            detail="A platform administrator cannot be assigned as a restaurant owner",
         )
 
     existing_owner = db.query(RestaurantMembership).filter(
@@ -259,12 +317,10 @@ def assign_restaurant_owner(
                 )
             )
 
-        # Existing order authorization also checks this global role.
-        user.role = UserRole.restaurant_owner
-
         db.commit()
         db.refresh(restaurant)
         return restaurant
+
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -301,17 +357,26 @@ def assign_delivery_person(
             status_code=403,
             detail="You do not have permission to assign a delivery person to this restaurant",
         )
+
     user = db.query(User).filter(User.id == data.user_id).first()
+
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if user.role in (
-        UserRole.platform_admin,
-        UserRole.restaurant_owner,
-    ):
+    if user.role == UserRole.platform_admin:
         raise HTTPException(
             status_code=400,
-            detail="This user cannot be assigned as a delivery person",
+            detail="A platform administrator cannot be assigned as a delivery person",
+        )
+
+    delivery_profile = db.query(DeliveryPerson).filter(
+        DeliveryPerson.user_id == user.id,
+    ).first()
+
+    if delivery_profile is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This user does not have a delivery person profile",
         )
 
     existing_membership = db.query(RestaurantMembership).filter(
@@ -325,6 +390,7 @@ def assign_delivery_person(
                 status_code=409,
                 detail="This user is already assigned as a delivery person for this restaurant",
             )
+
         raise HTTPException(
             status_code=409,
             detail="This user is already assigned to this restaurant with a different role",
@@ -339,16 +405,13 @@ def assign_delivery_person(
             )
         )
 
-        user.role = UserRole.delivery_person
-
         db.commit()
-        db.refresh(user)
 
         return {
             "message": "Delivery person assigned successfully",
             "user_id": user.id,
             "restaurant_id": restaurant.id,
-            "role": user.role.value,
+            "role": "delivery_person",
         }
 
     except IntegrityError:
@@ -357,7 +420,6 @@ def assign_delivery_person(
             status_code=409,
             detail="Could not assign this delivery person",
         )
-
 
 @router.patch(
     "/{restaurant_id}/activation",
@@ -380,61 +442,3 @@ def set_restaurant_activation(
     db.commit()
     db.refresh(restaurant)
     return restaurant
-
-@router.get(
-    "/{restaurant_id}/delivery-persons",
-    response_model=list[DeliveryPersonResponse],
-)
-def get_owner_restaurant_delivery_persons(
-    restaurant_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    restaurant = db.query(Restaurant).filter(
-        Restaurant.id == restaurant_id
-    ).first()
-
-    if restaurant is None:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-
-    owner_membership = db.query(RestaurantMembership).filter(
-        RestaurantMembership.restaurant_id == restaurant.id,
-        RestaurantMembership.user_id == current_user.id,
-        RestaurantMembership.role == "owner",
-    ).first()
-
-    if owner_membership is None:
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to view delivery persons for this restaurant",
-        )
-
-    delivery_persons = (
-        db.query(User)
-        .join(RestaurantMembership, User.id == RestaurantMembership.user_id)
-        .filter(
-            RestaurantMembership.restaurant_id == restaurant.id,
-            RestaurantMembership.role == "delivery_person",
-        )
-        .all()
-    )
-
-    response = []
-    for user in delivery_persons:
-        response.append(
-            DeliveryPersonResponse(
-                user_id=user.id,
-                name=user.name,
-                phone=user.phone,
-                email=user.email,
-                restaurants=[
-                    DeliveryRestaurantInfo(
-                        restaurant_id=restaurant.id,
-                        restaurant_name=restaurant.name,
-                        restaurant_slug=restaurant.slug,
-                    )
-                ],
-            )
-        )
-
-    return response

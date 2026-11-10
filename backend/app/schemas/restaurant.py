@@ -55,6 +55,7 @@ class RestaurantResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class RestaurantOwnerInfo(BaseModel):
     user_id: int
     name: str

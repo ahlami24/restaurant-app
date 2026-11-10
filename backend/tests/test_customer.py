@@ -12,10 +12,10 @@ def test_create_customer(client, db_session):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["name"] == "Test Customer"
     assert response.json()["phone"] == "0911000001"
-    assert response.json()["role"] == "customer"
+    assert response.json()["role"] == "user"
 
     customer = (
         db_session.query(Customer)
@@ -37,7 +37,7 @@ def test_get_customers(client, db_session):
             },
     )
 
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     admin = User(
         name="Test Admin",
@@ -69,7 +69,7 @@ def test_get_customer_by_id(client, db_session):
             "password": "test-password",
         },
     )
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     customer = (
         db_session.query(Customer)
@@ -140,7 +140,7 @@ def test_duplicate_phone_returns_400(client):
         },
     )
 
-    assert first_response.status_code == 200
+    assert first_response.status_code == 201
     assert second_response.status_code == 400
 
 
@@ -153,7 +153,7 @@ def test_update_customer(client, db_session):
             "password": "test-password",
         },
     )
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     customer = (
         db_session.query(Customer)
@@ -189,3 +189,38 @@ def test_update_customer(client, db_session):
     db_session.refresh(customer)
     assert customer.name == "Old Name"
     assert customer.phone == "0911000005"
+
+def test_customer_phone_update_changes_login_identifier(client, db_session):
+    password = "StrongTestPassword123"
+    created = client.post(
+        "/users",
+        json={
+            "name": "Phone Update Customer",
+            "phone": "0911000091",
+            "password": password,
+        },
+    )
+    assert created.status_code == 201
+    customer = db_session.query(Customer).filter_by(
+        user_id=created.json()["id"]
+    ).first()
+    token = create_access_token(created.json()["id"], UserRole.user.value)
+
+    updated = client.put(
+        f"/customers/{customer.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"phone": "0911000092"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["phone"] == "0911000092"
+
+    old_login = client.post(
+        "/auth/login",
+        json={"identifier": "0911000091", "password": password},
+    )
+    new_login = client.post(
+        "/auth/login",
+        json={"identifier": "0911000092", "password": password},
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200

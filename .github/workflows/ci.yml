@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-lint:
+    name: Tests and Ruff
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:///./ci.db
+          SECRET_KEY: ci-test-secret-key-not-for-production
+        run: |
+          python -m pytest -q
+
+      - name: Run Ruff on changed Python files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mapfile -t changed_files < <(
+            git diff --name-only --diff-filter=ACMR \
+              "$BASE_SHA...$HEAD_SHA" -- backend/ |
+            grep -E '\.py$' || true
+          )
+
+          if [ ${#changed_files[@]} -eq 0 ]; then
+            echo "No changed Python files to lint."
+          else
+            printf 'Checking:\n%s\n' "${changed_files[@]}"
+            ruff check "${changed_files[@]}"
+          fi

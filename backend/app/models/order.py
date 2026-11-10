@@ -1,6 +1,6 @@
 from sqlalchemy import Integer, String, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.food import Base
+from app.models.base import Base
 
 class Order(Base):
     __tablename__ = "orders"
@@ -11,5 +11,5 @@ class Order(Base):
     total_price: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     order_items = relationship("OrderItem", back_populates="order")
-    restaurant_id: Mapped[int] = mapped_column(Integer, ForeignKey("restaurants.id"), nullable=True)
+    restaurant_id: Mapped[int] = mapped_column(Integer, ForeignKey("restaurants.id"), nullable=False)
     restaurant = relationship("Restaurant", back_populates="orders")
