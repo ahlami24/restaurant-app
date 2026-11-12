@@ -1,8 +1,8 @@
-from app.models.order import Order
+from app.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
 from app.models.food import Food
+from app.models.order import Order
 from app.models.order_item import OrderItem
-
 
 ALLOWED_TRANSITIONS = {
     "pending": {
@@ -40,9 +40,7 @@ def create_order(db, order, customer_id, restaurant_id):
     ).first()
 
     if not customer:
-        raise ValueError(
-            f"Customer with id {customer_id} does not exist"
-        )
+        raise NotFoundError(f"Customer with id {customer_id} does not exist")
 
     food_prices = {
         food.id: food.price
@@ -56,8 +54,8 @@ def create_order(db, order, customer_id, restaurant_id):
 
     for item in order.order_items:
         if item.food_id not in food_prices:
-            raise ValueError(
-                f"Food with id {item.food_id} does not exist"
+            raise NotFoundError(
+                f"Food with id {item.food_id} does not exist in this restaurant"
             )
 
     db.add(new_order)
@@ -111,22 +109,25 @@ def update_order_status(
         new_status = new_status.value
     order = db.query(Order).filter(Order.id == order_id).first()
     if order is None:
-        raise ValueError(f"Order with id {order_id} does not exist")
+        raise NotFoundError(f"Order with id {order_id} does not exist")
 
     allowed_actors = ALLOWED_TRANSITIONS.get(order.status, {}).get(new_status)
     if allowed_actors is None:
-        raise ValueError(f"Cannot transition from '{order.status}' to '{new_status}'")
+        raise ConflictError(
+            f"Cannot transition from '{order.status}' to '{new_status}'"
+        )
     if actor_type not in allowed_actors:
-        raise PermissionError(
-            f"This action requires one of these roles: {', '.join(sorted(allowed_actors))}"
+        raise ForbiddenError(
+            f"Actor type '{actor_type}' is not allowed to transition from "
+            f"'{order.status}' to '{new_status}'"
         )
 
     if actor_type == "customer":
         if order.customer_id != customer_id:
-            raise PermissionError("You do not have permission to update this order")
+            raise ForbiddenError("You do not have permission to update this order")
     elif actor_type in ("restaurant", "delivery_person"):
         if not restaurant_ids or order.restaurant_id not in restaurant_ids:
-            raise PermissionError("You do not have permission to update this order")
+            raise ForbiddenError("You do not have permission to update this order")
 
     order.status = new_status
     return order
@@ -138,11 +139,13 @@ def update_order_items(db, order_id, customer_id, items):
         Order.customer_id == customer_id,
     ).first()
 
+    if not items:
+        raise ValueError("An order must contain at least one item")
     if not order:
-        raise ValueError("Order not found")
+        raise NotFoundError("Order not found")
 
     if order.status != "pending":
-        raise ValueError("Only pending orders can be updated")
+        raise ConflictError("Only pending orders can be updated")
 
     food_ids = [item.food_id for item in items]
 
@@ -161,7 +164,7 @@ def update_order_items(db, order_id, customer_id, items):
 
     for food_id in food_ids:
         if food_id not in food_prices:
-            raise ValueError(
+            raise NotFoundError(
                 f"Food with id {food_id} does not exist in this restaurant"
             )
 
