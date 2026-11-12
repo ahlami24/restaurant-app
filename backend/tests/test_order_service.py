@@ -108,26 +108,44 @@ def test_update_rejects_food_from_another_restaurant(db_session, order_setup):
 def test_update_removes_omitted_items(db_session, order_setup):
     data = order_setup
 
-    updated_order = update_order_items(
+    order_id = data["order"].id
+    customer_id = data["customer"].id
+    omitted_food_id = data["food2"].id
+    retained_food_id = data["food1"].id
+
+    update_order_items(
         db_session,
-        data["order"].id,
-        data["customer"].id,
+        order_id,
+        customer_id,
         [
             type(
                 "Item",
                 (),
                 {
-                    "food_id": data["food1"].id,
+                    "food_id": retained_food_id,
                     "quantity": 2,
                 },
             )()
         ],
     )
 
-    assert len(updated_order.order_items) == 1
-    assert updated_order.order_items[0].food_id == data["food1"].id
-    assert updated_order.total_price == 200
+    db_session.commit()
+    db_session.expire_all()
 
+    persisted_items = (
+        db_session.query(OrderItem)
+        .filter(OrderItem.order_id == order_id)
+        .all()
+    )
+
+    persisted_food_ids = {item.food_id for item in persisted_items}
+
+    assert len(persisted_items) == 1
+    assert retained_food_id in persisted_food_ids
+    assert omitted_food_id not in persisted_food_ids
+
+    persisted_order = db_session.query(Order).filter_by(id=order_id).one()
+    assert persisted_order.total_price == 200
 
 def test_update_recalculates_total(db_session, order_setup):
     data = order_setup
