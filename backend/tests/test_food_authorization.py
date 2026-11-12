@@ -1,10 +1,11 @@
+from app.models.customer import Customer
+from app.models.delivery_person import DeliveryPerson
+from app.models.food import Food
+from app.models.order import Order
 from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import UserRole
 from app.services.user import create_user as create_user_service
-from app.models.food import Food
-from app.models.customer import Customer
-from app.models.order import Order
-from app.models.delivery_person import DeliveryPerson
+
 
 def test_customer_cannot_create_food(client, db_session):
     registration = client.post(
@@ -645,3 +646,105 @@ def test_clearing_existing_food_category(client, db_session):
 
     assert clear_response.status_code == 200
     assert clear_response.json()["category"] is None
+
+def test_order_status_returns_conflict_and_not_found(
+    client, db_session, make_user, auth_headers
+):
+    delivery_user = make_user(phone="0911000090")
+    customer_user = make_user(phone="0911000091")
+
+    restaurant = Restaurant(
+        name="Status Test Restaurant",
+        slug="status-test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_user.id)
+
+    db_session.add_all([
+        customer,
+        delivery_profile,
+        RestaurantMembership(
+            user_id=delivery_user.id,
+            restaurant_id=restaurant.id,
+            role="delivery_person",
+        ),
+    ])
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        address="Test Address",
+        total_price=100,
+        status="pending",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    headers = auth_headers(delivery_user)
+
+    conflict_response = client.patch(
+        f"/orders/{order.id}/status",
+        json={"status": "out_for_delivery"},
+        headers=headers,
+    )
+    assert conflict_response.status_code == 409
+
+    missing_response = client.patch(
+        "/orders/999999/status",
+        json={"status": "out_for_delivery"},
+        headers=headers,
+    )
+    assert missing_response.status_code == 404
+
+def test_create_order_returns_400_for_duplicate_food_ids(
+    client, db_session, make_user, auth_headers
+):
+    user = make_user(phone="0911000092")
+    restaurant = Restaurant(
+        name="Duplicate Food Restaurant",
+        slug="duplicate-food-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=user.id)
+    food = Food(
+        name="Burger",
+        price=100,
+        restaurant_id=restaurant.id,
+    )
+    db_session.add_all([customer, food])
+    db_session.commit()
+
+    response = client.post(
+        "/restaurants/duplicate-food-restaurant/orders",
+        json={
+            "address": "Test Address",
+            "order_items": [
+                {"food_id": food.id, "quantity": 1},
+                {"food_id": food.id, "quantity": 2},
+            ],
+        },
+        headers=auth_headers(user),
+    )
+
+    assert response.status_code == 400
+
+def test_update_order_items_rejects_empty_list(
+    client, make_user, db_session, auth_headers
+):
+    user = make_user(phone="0911000093")
+    db_session.add(Customer(user_id=user.id))
+    db_session.commit()
+
+    response = client.patch(
+        "/orders/1/items",
+        json=[],
+        headers=auth_headers(user),
+    )
+
+    assert response.status_code == 422

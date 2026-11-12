@@ -1,5 +1,6 @@
 import pytest
 
+from app.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
 from app.models.food import Food
 from app.models.order import Order
@@ -87,7 +88,7 @@ def order_setup(db_session):
 def test_update_rejects_food_from_another_restaurant(db_session, order_setup):
     data = order_setup
 
-    with pytest.raises(ValueError, match="does not exist in this restaurant"):
+    with pytest.raises(NotFoundError, match="does not exist in this restaurant"):
         update_order_items(
             db_session,
             data["order"].id,
@@ -243,11 +244,57 @@ def test_restaurant_owner_can_cancel_preparing_order(db_session, order_setup):
 def test_customer_cannot_cancel_preparing_order(db_session, order_setup):
     data = order_setup
     data["order"].status = "preparing"
-    with pytest.raises(PermissionError, match="requires one of these roles"):
+    with pytest.raises(ForbiddenError, match="is not allowed to transition"):
         update_order_status(
             db_session,
             data["order"].id,
             "cancelled",
             actor_type="customer",
             customer_id=data["customer"].id,
+        )
+
+def test_update_rejects_empty_item_list(db_session, order_setup):
+    data = order_setup
+
+    with pytest.raises(ValueError, match="at least one item"):
+        update_order_items(
+            db_session,
+            data["order"].id,
+            data["customer"].id,
+            [],
+        )
+
+
+def test_update_rejects_non_pending_order(db_session, order_setup):
+    data = order_setup
+    data["order"].status = "preparing"
+
+    with pytest.raises(ConflictError, match="Only pending orders"):
+        update_order_items(
+            db_session,
+            data["order"].id,
+            data["customer"].id,
+            [
+                type(
+                    "Item",
+                    (),
+                    {
+                        "food_id": data["food1"].id,
+                        "quantity": 1,
+                    },
+                )()
+            ],
+        )
+
+
+def test_update_status_rejects_invalid_transition(db_session, order_setup):
+    data = order_setup
+
+    with pytest.raises(ConflictError, match="Cannot transition"):
+        update_order_status(
+            db_session,
+            data["order"].id,
+            "delivered",
+            actor_type="delivery_person",
+            restaurant_ids={data["order"].restaurant_id},
         )

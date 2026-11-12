@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
 from app.models.delivery_person import DeliveryPerson
 from app.models.order import Order
@@ -16,8 +17,14 @@ from app.routes.dependencies import (
 from app.schemas import OrderCreate, OrderItemUpdate, OrderResponse, OrderStatusUpdate
 from app.services.order import (
     create_order as create_order_service,
+)
+from app.services.order import (
     get_orders as get_orders_service,
+)
+from app.services.order import (
     update_order_items as update_order_items_service,
+)
+from app.services.order import (
     update_order_status as update_order_status_service,
 )
 
@@ -42,6 +49,12 @@ def create_order(
         db.commit()
         db.refresh(new_order)
         return new_order
+    except NotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -152,12 +165,15 @@ def update_order_status(
         db.commit()
         db.refresh(order)
         return order
-    except PermissionError as exc:
+    except NotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ForbiddenError as exc:
         db.rollback()
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except ValueError as exc:
+    except ConflictError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal Server Error") from exc
@@ -166,7 +182,7 @@ def update_order_status(
 @router.patch("/orders/{order_id}/items", response_model=OrderResponse)
 def update_order_items(
     order_id: int,
-    order_items: list[OrderItemUpdate],
+    order_items: list[OrderItemUpdate] = Body(min_length=1),
     db: Session = Depends(get_db),
     customer: Customer = Depends(get_current_customer),
 ):
@@ -175,6 +191,12 @@ def update_order_items(
         db.commit()
         db.refresh(order)
         return order
+    except NotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
