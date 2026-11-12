@@ -1,7 +1,11 @@
-from app.models.restaurant import Restaurant
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+from app.models.delivery_person import DeliveryPerson
+from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import User, UserRole
 from app.services.auth import create_access_token, hash_password
-from app.models.delivery_person import DeliveryPerson
+
 
 def test_list_restaurants_returns_active_restaurants(client, db_session):
     db_session.add_all([
@@ -838,3 +842,295 @@ def test_delivery_person_cannot_list_restaurant_delivery_persons(
     )
 
     assert response.status_code == 403
+
+
+
+def test_platform_admin_can_list_restaurants_with_owners(client, db_session, auth_headers, make_user):
+    admin = User(
+        name="Platform Admin",
+        phone="09119990301",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    owner = User(
+        name="Abdi Owner",
+        phone="09119990302",
+        email="abdi.owner@example.com",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    restaurant = Restaurant(
+        name="Abdi Restaurant",
+        slug="abdi-restaurant",
+        is_active=True,
+    )
+
+    db_session.add_all([admin, owner, restaurant])
+    db_session.flush()
+
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner.id,
+            restaurant_id=restaurant.id,
+            role="owner",
+        )
+    )
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin/owners",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == 1
+    assert data[0]["restaurant_name"] == "Abdi Restaurant"
+    assert data[0]["restaurant_slug"] == "abdi-restaurant"
+    assert data[0]["is_active"] is True
+    assert data[0]["owner"] == {
+        "user_id": owner.id,
+        "name": "Abdi Owner",
+        "phone": "09119990302",
+        "email": "abdi.owner@example.com",
+    }
+
+
+def test_regular_user_cannot_list_restaurants_with_owners(client, db_session, auth_headers, make_user):
+    user = User(
+        name="Regular User",
+        phone="09119990303",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = create_access_token(user.id, UserRole.user.value)
+    response = client.get(
+        "/restaurants/admin/owners",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+
+def test_platform_admin_can_list_restaurant_without_owner(client, db_session, make_user, auth_headers):
+    admin = User(
+        name="Platform Admin",
+        phone="09119990311",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    restaurant = Restaurant(
+        name="Ownerless Restaurant",
+        slug="ownerless-restaurant",
+        is_active=True,
+    )
+
+    db_session.add_all([admin, restaurant])
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin/owners",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    restaurant_data = next(
+        item
+        for item in data
+        if item["restaurant_slug"] == "ownerless-restaurant"
+    )
+
+    assert restaurant_data["restaurant_name"] == "Ownerless Restaurant"
+    assert restaurant_data["is_active"] is True
+    assert restaurant_data["owner"] is None
+
+
+def test_platform_admin_can_list_delivery_persons_with_multiple_restaurants(
+    client, db_session, make_user, auth_headers
+):
+    admin = User(
+        name="Platform Admin",
+        phone="09119990401",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    delivery_user = User(
+        name="Multi-Restaurant Delivery Person",
+        phone="09119990402",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    restaurant1 = Restaurant(
+        name="Delivery Restaurant One",
+        slug="delivery-restaurant-one",
+        is_active=True,
+    )
+    restaurant2 = Restaurant(
+        name="Delivery Restaurant Two",
+        slug="delivery-restaurant-two",
+        is_active=True,
+    )
+
+    db_session.add_all([admin, delivery_user, restaurant1, restaurant2])
+    db_session.flush()
+
+    db_session.add_all([
+        DeliveryPerson(user_id=delivery_user.id),
+        RestaurantMembership(
+            user_id=delivery_user.id,
+            restaurant_id=restaurant1.id,
+            role="delivery_person",
+        ),
+        RestaurantMembership(
+            user_id=delivery_user.id,
+            restaurant_id=restaurant2.id,
+            role="delivery_person",
+        ),
+    ])
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin/delivery-persons",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == 1
+    delivery_data = data[0]
+    assert delivery_data["user_id"] == delivery_user.id
+    assert delivery_data["name"] == "Multi-Restaurant Delivery Person"
+    assert delivery_data["phone"] == "09119990402"
+    assert len(delivery_data["restaurants"]) == 2
+    assert {
+        restaurant["restaurant_slug"]
+        for restaurant in delivery_data["restaurants"]
+    } == {
+        "delivery-restaurant-one",
+        "delivery-restaurant-two",
+    }
+
+
+def test_platform_admin_can_list_delivery_person_without_restaurants(
+    client, db_session, make_user, auth_headers
+):
+    admin = User(
+        name="Platform Admin",
+        phone="09119990411",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.platform_admin,
+    )
+    delivery_user = User(
+        name="Delivery Person Without Restaurants",
+        phone="09119990412",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+
+    db_session.add_all([admin, delivery_user])
+    db_session.flush()
+
+    db_session.add(DeliveryPerson(user_id=delivery_user.id))
+    db_session.commit()
+
+    token = create_access_token(admin.id, UserRole.platform_admin.value)
+    response = client.get(
+        "/restaurants/admin/delivery-persons",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == 1
+    delivery_data = data[0]
+    assert delivery_data["user_id"] == delivery_user.id
+    assert delivery_data["name"] == "Delivery Person Without Restaurants"
+    assert delivery_data["phone"] == "09119990412"
+    assert delivery_data["restaurants"] == []
+
+def test_database_rejects_multiple_restaurant_owners(
+    db_session, make_user
+):
+    restaurant = Restaurant(
+        name="Single Owner Test",
+        slug="single-owner-test",
+    )
+    owner1 = make_user(phone="09119991001")
+    owner2 = make_user(phone="09119991002")
+
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner1.id,
+            restaurant_id=restaurant.id,
+            role="owner",
+        )
+    )
+    db_session.commit()
+
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner2.id,
+            restaurant_id=restaurant.id,
+            role="owner",
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
+
+
+def test_database_allows_multiple_restaurant_delivery_persons(
+    db_session, make_user
+):
+    restaurant = Restaurant(
+        name="Multiple Delivery Test",
+        slug="multiple-delivery-test",
+    )
+    person1 = make_user(phone="09119991003")
+    person2 = make_user(phone="09119991004")
+
+    db_session.add(restaurant)
+    db_session.flush()
+
+    db_session.add_all([
+        RestaurantMembership(
+            user_id=person1.id,
+            restaurant_id=restaurant.id,
+            role="delivery_person",
+        ),
+        RestaurantMembership(
+            user_id=person2.id,
+            restaurant_id=restaurant.id,
+            role="delivery_person",
+        ),
+    ])
+
+    db_session.commit()
+
+    memberships = (
+        db_session.query(RestaurantMembership)
+        .filter_by(
+            restaurant_id=restaurant.id,
+            role="delivery_person",
+        )
+        .all()
+    )
+
+    assert len(memberships) == 2
