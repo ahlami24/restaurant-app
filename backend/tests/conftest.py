@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import get_db
+from app.limiter import limiter
 from app.main import app
 from app.models import (
     customer,  # noqa: F401
@@ -20,6 +21,13 @@ from app.models import (
 from app.models.base import Base
 from app.models.user import User, UserRole
 from app.services.auth import create_access_token, hash_password
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
 
 
 @pytest.fixture
