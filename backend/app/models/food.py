@@ -1,6 +1,8 @@
-from sqlalchemy import Integer, String, Float, ForeignKey
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.models.base import Base
+
 
 class Food(Base):
     __tablename__ = "foods"

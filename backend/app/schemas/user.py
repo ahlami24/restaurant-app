@@ -1,14 +1,15 @@
 from pydantic import (
     BaseModel,
-    Field,
     ConfigDict,
     EmailStr,
+    Field,
     field_validator,
     model_validator,
 )
 
 from app.models.user import UserRole
 from app.schemas.restaurant import RestaurantCreate, RestaurantResponse
+
 
 class UserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")

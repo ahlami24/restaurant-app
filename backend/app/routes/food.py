@@ -1,18 +1,22 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models.food import Food
 from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import User
+from app.routes.dependencies import (
+    get_current_user,
+    get_restaurant_membership,
+)
 from app.schemas.food import FoodCreate, FoodResponse, FoodUpdate
-from app.services.food import(create_food as create_food_service,
-                              get_foods as get_foods_service,
-                              get_food as get_food_service,
-                              update_food as update_food_service,
-                              delete_food as delete_food_service)
-from app.routes.dependencies import get_current_user, require_role, get_restaurant_membership
-from typing import Literal
+from app.services.food import create_food as create_food_service
+from app.services.food import delete_food as delete_food_service
+from app.services.food import get_food as get_food_service
+from app.services.food import get_foods as get_foods_service
+from app.services.food import update_food as update_food_service
 
 router = APIRouter(tags=["foods"])
 
@@ -26,7 +30,7 @@ def get_restaurant_foods(
     category: str | None = Query(default=None, min_length=1),
     sort_by: Literal["price_asc", "price_desc"] | None = None,
 ):
-    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug, Restaurant.is_active == True).first()
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug, Restaurant.is_active.is_(True)).first()
     if restaurant is None:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
@@ -41,7 +45,7 @@ def get_food(
     food_id: int,
     db:Session = Depends(get_db)
 ):
-    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug, Restaurant.is_active == True, ).first()
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug, Restaurant.is_active.is_(True)).first()
     if restaurant is None:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 

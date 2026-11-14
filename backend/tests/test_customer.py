@@ -1,6 +1,7 @@
+from app.models.customer import Customer
 from app.models.user import User, UserRole
 from app.services.auth import create_access_token
-from app.models.customer import Customer
+
 
 def test_create_customer(client, db_session):
     response = client.post(
