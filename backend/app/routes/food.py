@@ -6,10 +6,10 @@ from app.models.food import Food
 from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import User
 from app.schemas.food import FoodCreate, FoodResponse, FoodUpdate
-from app.services.food import(create_food as create_food_service, 
-                              get_foods as get_foods_service, 
-                              get_food as get_food_service, 
-                              update_food as update_food_service, 
+from app.services.food import(create_food as create_food_service,
+                              get_foods as get_foods_service,
+                              get_food as get_food_service,
+                              update_food as update_food_service,
                               delete_food as delete_food_service)
 from app.routes.dependencies import get_current_user, require_role, get_restaurant_membership
 from typing import Literal

@@ -31,7 +31,7 @@ def test_get_customers(client, db_session):
     created = client.post(
         "/users",
         json={
-            "name": "Customer One", 
+            "name": "Customer One",
             "phone": "0911000002",
             "password": "test-password",
             },

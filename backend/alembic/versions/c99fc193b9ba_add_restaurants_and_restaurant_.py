@@ -149,4 +149,3 @@ def downgrade() -> None:
     op.drop_index("ix_restaurants_slug", table_name="restaurants")
     op.drop_table("restaurants")
 
-    

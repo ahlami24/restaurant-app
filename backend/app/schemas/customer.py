@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class CustomerResponse(BaseModel):
     id: int
     name: str
-    phone: str 
+    phone: str
     model_config = ConfigDict(from_attributes=True)
 
 class CustomerUpdate(BaseModel):

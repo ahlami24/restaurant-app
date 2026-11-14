@@ -16,7 +16,7 @@ class UserCreate(BaseModel):
     phone: str = Field(max_length=20)
     password: str = Field(min_length=1, max_length=255)
     email: EmailStr | None = None
-    
+
     @field_validator("email", mode="before")
     @classmethod
     def normalize_email(cls, value):
