@@ -144,7 +144,7 @@ CREATE DATABASE restaurant_db;
 From the repository root, copy the example environment file:
 
 ```bash
-cp .env.example .env
+cp ../.env.example ../.env
 ```
 
 Edit the .env file and replace the example database credentials with your actual PostgreSQL credentials. Set a strong, randomly generated secret key.
