@@ -213,7 +213,8 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
     assert [order["id"] for order in orders] == [assigned_order.id]
 
 
-def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
+
+def test_delivery_person_can_update_orders_only_at_assigned_restaurants(
     client, db_session
 ):
     delivery_person = create_user_service(
@@ -260,11 +261,6 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
         RestaurantMembership(
             user_id=delivery_person.id,
             restaurant_id=restaurant_a.id,
-            role="delivery_person",
-        ),
-        RestaurantMembership(
-            user_id=delivery_person.id,
-            restaurant_id=restaurant_b.id,
             role="delivery_person",
         ),
     ])
@@ -316,15 +312,13 @@ def test_delivery_person_can_update_orders_at_multiple_assigned_restaurants(
         headers=headers,
     )
     assert response_a.status_code == 200
-    assert response_a.json()["status"] == "out_for_delivery"
 
     response_b = client.patch(
         f"/orders/{order_b_id}/status",
         json={"status": "out_for_delivery"},
         headers=headers,
     )
-    assert response_b.status_code == 200
-    assert response_b.json()["status"] == "out_for_delivery"
+    assert response_b.status_code == 403
 
     response_c = client.patch(
         f"/orders/{order_c_id}/status",

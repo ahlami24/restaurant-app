@@ -46,6 +46,13 @@ class RestaurantMembership(Base):
             postgresql_where=text("role = 'owner'"),
             sqlite_where=text("role = 'owner'"),
         ),
+        Index(
+            "uq_delivery_person_single_restaurant",
+            "user_id",
+            unique=True,
+            postgresql_where=text("role = 'delivery_person'"),
+            sqlite_where=text("role = 'delivery_person'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
