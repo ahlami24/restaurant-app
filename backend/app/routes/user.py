@@ -73,6 +73,7 @@ def register_delivery_person(
         )
 
         db.add(DeliveryPerson(user_id=new_user.id))
+        db.add(Customer(user_id=new_user.id))
         db.commit()
         db.refresh(new_user)
 
