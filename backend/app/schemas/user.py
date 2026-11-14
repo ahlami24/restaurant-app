@@ -1,8 +1,8 @@
 from pydantic import (
     BaseModel,
-    Field,
     ConfigDict,
     EmailStr,
+    Field,
     field_validator,
     model_validator,
 )
@@ -10,11 +10,12 @@ from pydantic import (
 from app.models.user import UserRole
 from app.schemas.restaurant import RestaurantCreate, RestaurantResponse
 
+
 class UserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(max_length=100)
     phone: str = Field(max_length=20)
-    password: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=12, max_length=128)
     email: EmailStr | None = None
     
     @field_validator("email", mode="before")

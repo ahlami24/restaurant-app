@@ -263,3 +263,59 @@ def test_login_with_legacy_phone_field(client):
     assert response.status_code == 200
     assert response.json()["token_type"] == "bearer"
     assert response.json()["access_token"]
+
+
+def test_register_rejects_password_shorter_than_12_characters(client):
+    response = client.post(
+        "/users",
+        json={
+            "name": "Short Password User",
+            "phone": "0911000030",
+            "password": "Short123",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_rejects_password_longer_than_128_characters(client):
+    response = client.post(
+        "/users",
+        json={
+            "name": "Long Password User",
+            "phone": "0911000031",
+            "password": "A" * 129,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_accepts_password_of_12_characters(client):
+    response = client.post(
+        "/users",
+        json={
+            "name": "Valid Password User",
+            "phone": "0911000032",
+            "password": "Abcdef123456",
+        },
+    )
+
+    assert response.status_code == 201
+
+
+def test_login_rate_limit(client):
+    responses = []
+
+    for _ in range(6):
+        response = client.post(
+            "/auth/login",
+            json={
+                "identifier": "unknown@example.com",
+                "password": "WrongPassword123",
+            },
+        )
+        responses.append(response)
+
+    assert all(response.status_code == 401 for response in responses[:5])
+    assert responses[5].status_code == 429
