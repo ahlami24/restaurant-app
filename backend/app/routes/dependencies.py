@@ -9,7 +9,6 @@ from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import User, UserRole
 from app.services.auth import decode_access_token
 
-
 security = HTTPBearer()
 
 

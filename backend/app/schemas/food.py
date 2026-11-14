@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
 
+
 class FoodCreate(BaseModel):
-    name: str 
+    name: str
     price: float = Field(..., gt=0)
     category: str | None = None
 
