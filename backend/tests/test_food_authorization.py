@@ -312,6 +312,7 @@ def test_delivery_person_can_update_orders_only_at_assigned_restaurants(
         headers=headers,
     )
     assert response_a.status_code == 200
+    assert response_a.json()["status"] == "out_for_delivery"
 
     response_b = client.patch(
         f"/orders/{order_b_id}/status",

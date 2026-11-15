@@ -778,6 +778,147 @@ def test_restaurant_owner_can_list_assigned_delivery_persons(
         }
     ]
 
+
+def test_restaurant_owner_can_list_available_delivery_persons(
+    client, db_session
+):
+    from app.models.restaurant import RestaurantMembership
+
+    owner = User(
+        name="Restaurant Owner",
+        phone="09119990401",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    available_delivery = User(
+        name="Available Delivery",
+        phone="09119990402",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    hired_delivery = User(
+        name="Hired Delivery",
+        phone="09119990403",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+
+    restaurant = Restaurant(
+        name="Available Delivery Restaurant",
+        slug="available-delivery-restaurant",
+        is_active=True,
+    )
+
+    db_session.add_all([
+        owner,
+        available_delivery,
+        hired_delivery,
+        restaurant,
+    ])
+    db_session.flush()
+
+    db_session.add_all([
+        DeliveryPerson(user_id=available_delivery.id),
+        DeliveryPerson(user_id=hired_delivery.id),
+        RestaurantMembership(
+            user_id=owner.id,
+            restaurant_id=restaurant.id,
+            role="owner",
+        ),
+        RestaurantMembership(
+            user_id=hired_delivery.id,
+            restaurant_id=restaurant.id,
+            role="delivery_person",
+        ),
+    ])
+    db_session.commit()
+
+    token = create_access_token(owner.id, UserRole.user.value)
+
+    response = client.get(
+        f"/restaurants/{restaurant.id}/available-delivery-persons",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["user_id"] == available_delivery.id
+    assert data[0]["name"] == "Available Delivery"
+    assert data[0]["phone"] == "09119990402"
+    assert data[0]["restaurants"] == []
+
+
+def test_regular_user_cannot_list_available_delivery_persons(
+    client, db_session
+):
+    owner = User(
+        name="Restaurant Owner",
+        phone="09119990501",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    customer = User(
+        name="Regular Customer",
+        phone="09119990502",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+
+    restaurant = Restaurant(
+        name="Authorization Test Restaurant",
+        slug="available-delivery-auth-restaurant",
+        is_active=True,
+    )
+
+    db_session.add_all([owner, customer, restaurant])
+    db_session.flush()
+
+    from app.models.restaurant import RestaurantMembership
+
+    db_session.add(
+        RestaurantMembership(
+            user_id=owner.id,
+            restaurant_id=restaurant.id,
+            role="owner",
+        )
+    )
+    db_session.commit()
+
+    token = create_access_token(customer.id, UserRole.user.value)
+
+    response = client.get(
+        f"/restaurants/{restaurant.id}/available-delivery-persons",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_available_delivery_persons_returns_404_for_unknown_restaurant(
+    client, db_session
+):
+    user = User(
+        name="Restaurant Owner",
+        phone="09119990601",
+        password_hash=hash_password("TestPassword123"),
+        role=UserRole.user,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = create_access_token(user.id, UserRole.user.value)
+
+    response = client.get(
+        "/restaurants/999999/available-delivery-persons",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Restaurant not found"
+
+
 def test_regular_user_cannot_list_restaurant_delivery_persons(
     client, db_session
 ):
