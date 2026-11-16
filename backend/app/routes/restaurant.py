@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.models.delivery_person import DeliveryPerson
+
 from app.database import get_db
+from app.models.delivery_person import DeliveryPerson
 from app.models.restaurant import Restaurant, RestaurantMembership
 from app.models.user import User, UserRole
 from app.routes.dependencies import (
@@ -10,21 +11,22 @@ from app.routes.dependencies import (
     require_platform_admin,
 )
 from app.schemas.restaurant import (
+    AdminRestaurantOwnerResponse,
     DeliveryPersonAssign,
     DeliveryPersonAssignmentResponse,
+    DeliveryPersonResponse,
+    DeliveryRestaurantInfo,
     RestaurantActivationUpdate,
     RestaurantCreate,
     RestaurantOwnerAssign,
-    RestaurantResponse,
     RestaurantOwnerInfo,
-    AdminRestaurantOwnerResponse,
-    DeliveryRestaurantInfo,
-    DeliveryPersonResponse,
-
+    RestaurantResponse,
+)
+from app.services.restaurant import (
+    get_restaurant_by_slug as get_restaurant_by_slug_service,
 )
 from app.services.restaurant import (
     get_restaurants as get_restaurants_service,
-    get_restaurant_by_slug as get_restaurant_by_slug_service,
 )
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
@@ -196,6 +198,74 @@ def get_owner_restaurant_delivery_persons(
         )
         for user in delivery_persons
     ]
+
+
+@router.get(
+    "/{restaurant_id}/available-delivery-persons",
+    response_model=list[DeliveryPersonResponse],
+)
+def get_available_delivery_persons(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.id == restaurant_id
+    ).first()
+
+    if restaurant is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Restaurant not found",
+        )
+
+    owner_membership = db.query(RestaurantMembership).filter(
+        RestaurantMembership.restaurant_id == restaurant.id,
+        RestaurantMembership.user_id == current_user.id,
+        RestaurantMembership.role == "owner",
+    ).first()
+
+    if owner_membership is None:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view available delivery persons",
+        )
+
+    already_hired = (
+        db.query(RestaurantMembership.id)
+        .filter(
+            RestaurantMembership.user_id == User.id,
+            RestaurantMembership.role == "delivery_person",
+        )
+        .exists()
+    )
+
+    delivery_persons = (
+        db.query(User)
+        .join(
+            DeliveryPerson,
+            DeliveryPerson.user_id == User.id,
+        )
+        .filter(
+            ~already_hired,
+            User.role != UserRole.platform_admin,
+        )
+        .order_by(User.id)
+        .all()
+    )
+
+    return [
+        DeliveryPersonResponse(
+            user_id=user.id,
+            name=user.name,
+            phone=user.phone,
+            email=user.email,
+            restaurants=[],
+        )
+        for user in delivery_persons
+    ]
+
+
 @router.get("/admin/{restaurant_slug}", response_model=RestaurantResponse)
 def get_restaurant_by_slug_admin(
     restaurant_slug: str,
@@ -379,6 +449,7 @@ def assign_delivery_person(
             detail="This user does not have a delivery person profile",
         )
 
+    # First, check whether already assigned to this restaurant.
     existing_membership = db.query(RestaurantMembership).filter(
         RestaurantMembership.restaurant_id == restaurant.id,
         RestaurantMembership.user_id == user.id,
@@ -394,6 +465,18 @@ def assign_delivery_person(
         raise HTTPException(
             status_code=409,
             detail="This user is already assigned to this restaurant with a different role",
+        )
+
+    # Then, check whether hired by another restaurant.
+    existing_delivery_membership = db.query(RestaurantMembership).filter(
+        RestaurantMembership.user_id == user.id,
+        RestaurantMembership.role == "delivery_person",
+    ).first()
+
+    if existing_delivery_membership is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This delivery person is already hired by another restaurant",
         )
 
     try:
