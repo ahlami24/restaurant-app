@@ -85,9 +85,9 @@ restaurant-app/
 │   ├── alembic/           # Database migrations
 │   ├── scripts/           # Administrative scripts
 │   ├── tests/             # Automated tests
-│   ├── requirements.txt
-│   └── .env.example
+│   └── requirements.txt
 │
+├── .env.example
 └── README.md
 ```
 
@@ -141,14 +141,13 @@ Create a PostgreSQL database:
 CREATE DATABASE restaurant_db;
 ```
 
-Create a `.env` file inside the `backend/` directory:
+From the repository root, copy the example environment file:
 
-```env
-DATABASE_URL=postgresql+psycopg2://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/restaurant_db
-SECRET_KEY=YOUR_SECRET_KEY
+```bash
+cp ../.env.example ../.env
 ```
 
-Replace the example credentials with your actual PostgreSQL credentials and use a strong, randomly generated secret key.
+Edit the .env file and replace the example database credentials with your actual PostgreSQL credentials. Set a strong, randomly generated secret key.
 
 **Important:** Never commit your `.env` file or expose database credentials and secret keys. The repository includes `.env.example` as a configuration reference.
 
