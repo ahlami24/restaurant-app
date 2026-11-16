@@ -1,6 +1,6 @@
 from sqlalchemy import or_
 
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.services.auth import hash_password
 
 

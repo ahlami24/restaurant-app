@@ -4,6 +4,7 @@ import sys
 from sqlalchemy.exc import IntegrityError
 
 from app.database import SessionLocal
+from app.models.customer import Customer
 from app.models.user import User, UserRole
 from app.services.auth import hash_password
 
@@ -48,6 +49,10 @@ def main():
             role=UserRole.platform_admin,
         )
         db.add(admin)
+        db.flush()
+
+        db.add(Customer(user_id=admin.id))
+
         db.commit()
         db.refresh(admin)
 

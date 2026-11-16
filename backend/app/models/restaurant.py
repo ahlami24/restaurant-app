@@ -59,4 +59,3 @@ class RestaurantMembership(Base):
 
     user = relationship("User", back_populates="restaurant_memberships")
     restaurant = relationship("Restaurant", back_populates="memberships")
-   

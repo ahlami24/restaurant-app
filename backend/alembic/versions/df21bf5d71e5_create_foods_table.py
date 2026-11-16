@@ -1,15 +1,11 @@
 """create foods table
 
 Revision ID: df21bf5d71e5
-Revises: 
+Revises:
 Create Date: 2026-09-28 09:26:42.157466
 
 """
 from typing import Sequence, Union
-
-from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = 'df21bf5d71e5'
