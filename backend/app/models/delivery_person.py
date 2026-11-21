@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -21,5 +21,9 @@ class DeliveryPerson(Base):
 
     user = relationship(
         "User",
+        back_populates="delivery_person",
+    )
+    orders = relationship(
+        "Order",
         back_populates="delivery_person",
     )

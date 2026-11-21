@@ -1,8 +1,10 @@
 from app.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
+from app.models.delivery_person import DeliveryPerson
 from app.models.food import Food
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.restaurant import RestaurantMembership
 
 ALLOWED_TRANSITIONS = {
     "pending": {
@@ -97,6 +99,44 @@ def get_order_by_id(db, order_id, customer_id):
     )
 
 
+def assign_delivery_person(db, restaurant_id, order_id, delivery_person_id):
+    order = db.query(Order).filter(
+        Order.id == order_id,
+        Order.restaurant_id == restaurant_id,
+    ).first()
+
+    if order is None:
+        raise NotFoundError("Order not found in this restaurant")
+
+    if order.status != "ready":
+        raise ConflictError(
+            "A delivery person can only be assigned to a ready order"
+        )
+
+    delivery_person = db.query(DeliveryPerson).filter(
+        DeliveryPerson.id == delivery_person_id
+    ).first()
+
+    if delivery_person is None:
+        raise NotFoundError("Delivery person not found")
+
+    membership = db.query(RestaurantMembership).filter(
+        RestaurantMembership.user_id == delivery_person.user_id,
+        RestaurantMembership.restaurant_id == restaurant_id,
+        RestaurantMembership.role == "delivery_person",
+    ).first()
+
+    if membership is None:
+        raise ConflictError(
+            "This delivery person is not hired by this restaurant"
+        )
+
+    order.delivery_person_id = delivery_person.id
+    db.flush()
+
+    return order
+
+
 def update_order_status(
     db,
     order_id,
@@ -104,6 +144,7 @@ def update_order_status(
     actor_type,
     customer_id=None,
     restaurant_ids=None,
+    delivery_person_id=None,
 ):
     if hasattr(new_status, "value"):
         new_status = new_status.value
@@ -125,10 +166,12 @@ def update_order_status(
     if actor_type == "customer":
         if order.customer_id != customer_id:
             raise ForbiddenError("You do not have permission to update this order")
-    elif actor_type in ("restaurant", "delivery_person"):
+    elif actor_type == "restaurant":
         if not restaurant_ids or order.restaurant_id not in restaurant_ids:
             raise ForbiddenError("You do not have permission to update this order")
-
+    elif actor_type == "delivery_person":
+        if order.delivery_person_id != delivery_person_id:
+            raise ForbiddenError("You are not assigned to this order")
     order.status = new_status
     return order
 

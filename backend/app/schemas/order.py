@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class OrderStatus(str, Enum):
     PENDING = "pending"
@@ -31,9 +33,13 @@ class OrderResponse(BaseModel):
     address: str
     total_price: float
     status: OrderStatus
+    delivery_person_id: int | None
     order_items: list[OrderItemResponse]  # List of dictionaries containing food_id, quantity, and price
     model_config = ConfigDict(from_attributes=True)
 
 class OrderItemUpdate(BaseModel):
     food_id: int
     quantity: int = Field(..., gt=0)
+
+class OrderDeliveryPersonAssignment(BaseModel):
+    delivery_person_id: int = Field(..., gt=0)
