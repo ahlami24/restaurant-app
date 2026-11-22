@@ -40,19 +40,30 @@ from app.services.order import (
 router = APIRouter()
 
 
-@router.post("/restaurants/{restaurant_slug}/orders", response_model=OrderResponse, status_code=201)
+@router.post(
+    "/restaurants/{restaurant_slug}/orders",
+    response_model=OrderResponse,
+    status_code=201,
+)
 def create_order(
     restaurant_slug: str,
     order: OrderCreate,
     db: Session = Depends(get_db),
     customer: Customer = Depends(get_current_customer),
 ):
-    restaurant = db.query(Restaurant).filter(
-        Restaurant.slug == restaurant_slug,
-        Restaurant.is_active.is_(True),
-    ).first()
+    restaurant = (
+        db.query(Restaurant)
+        .filter(
+            Restaurant.slug == restaurant_slug,
+            Restaurant.is_active.is_(True),
+        )
+        .first()
+    )
     if restaurant is None:
-        raise HTTPException(status_code=404, detail=f"Restaurant with slug '{restaurant_slug}' not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Restaurant with slug '{restaurant_slug}' not found",
+        )
     try:
         new_order = create_order_service(db, order, customer.id, restaurant.id)
         db.commit()
@@ -85,10 +96,14 @@ def get_delivery_orders(
     db: Session = Depends(get_db),
     delivery_person: DeliveryPerson = Depends(get_current_delivery_person),
 ):
-    return db.query(Order).filter(
-        Order.delivery_person_id == delivery_person.id,
-        Order.status.in_(["ready", "out_for_delivery"]),
-    ).all()
+    return (
+        db.query(Order)
+        .filter(
+            Order.delivery_person_id == delivery_person.id,
+            Order.status.in_(["ready", "out_for_delivery"]),
+        )
+        .all()
+    )
 
 
 @router.get("/restaurants/{restaurant_slug}/orders", response_model=list[OrderResponse])
@@ -146,10 +161,14 @@ def update_order_status(
     actor_type = None
 
     if new_status in ("preparing", "ready"):
-        memberships = db.query(RestaurantMembership).filter(
-            RestaurantMembership.user_id == current_user.id,
-            RestaurantMembership.role.in_(["owner", "manager"]),
-        ).all()
+        memberships = (
+            db.query(RestaurantMembership)
+            .filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role.in_(["owner", "manager"]),
+            )
+            .all()
+        )
 
         if not memberships:
             raise HTTPException(
@@ -161,9 +180,11 @@ def update_order_status(
         restaurant_ids = {m.restaurant_id for m in memberships}
 
     elif new_status in ("out_for_delivery", "delivered"):
-        delivery_person = db.query(DeliveryPerson).filter(
-            DeliveryPerson.user_id == current_user.id
-        ).first()
+        delivery_person = (
+            db.query(DeliveryPerson)
+            .filter(DeliveryPerson.user_id == current_user.id)
+            .first()
+        )
 
         if delivery_person is None:
             raise HTTPException(
@@ -171,10 +192,14 @@ def update_order_status(
                 detail="Delivery person profile required",
             )
 
-        memberships = db.query(RestaurantMembership).filter(
-            RestaurantMembership.user_id == current_user.id,
-            RestaurantMembership.role == "delivery_person",
-        ).all()
+        memberships = (
+            db.query(RestaurantMembership)
+            .filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.role == "delivery_person",
+            )
+            .all()
+        )
 
         if not memberships:
             raise HTTPException(
@@ -192,19 +217,23 @@ def update_order_status(
         if target is None:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        staff = db.query(RestaurantMembership).filter(
-            RestaurantMembership.user_id == current_user.id,
-            RestaurantMembership.restaurant_id == target.restaurant_id,
-            RestaurantMembership.role.in_(["owner", "manager"]),
-        ).first()
+        staff = (
+            db.query(RestaurantMembership)
+            .filter(
+                RestaurantMembership.user_id == current_user.id,
+                RestaurantMembership.restaurant_id == target.restaurant_id,
+                RestaurantMembership.role.in_(["owner", "manager"]),
+            )
+            .first()
+        )
 
         if staff is not None:
             actor_type = "restaurant"
             restaurant_ids = {target.restaurant_id}
         else:
-            customer = db.query(Customer).filter(
-                Customer.user_id == current_user.id
-            ).first()
+            customer = (
+                db.query(Customer).filter(Customer.user_id == current_user.id).first()
+            )
 
             if customer is None or customer.id != target.customer_id:
                 raise HTTPException(

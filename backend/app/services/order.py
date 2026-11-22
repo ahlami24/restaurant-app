@@ -33,13 +33,10 @@ def create_order(db, order, customer_id, restaurant_id):
 
     if len(set(food_ids)) != len(food_ids):
         raise ValueError(
-            "Duplicate food_id found in order_items. "
-            "Each food_id must be unique."
+            "Duplicate food_id found in order_items. Each food_id must be unique."
         )
 
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id
-    ).first()
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
 
     if not customer:
         raise NotFoundError(f"Customer with id {customer_id} does not exist")
@@ -73,19 +70,14 @@ def create_order(db, order, customer_id, restaurant_id):
         )
 
     new_order.total_price = sum(
-        item.price * item.quantity
-        for item in new_order.order_items
+        item.price * item.quantity for item in new_order.order_items
     )
 
     return new_order
 
 
 def get_orders(db, customer_id):
-    return (
-        db.query(Order)
-        .filter(Order.customer_id == customer_id)
-        .all()
-    )
+    return db.query(Order).filter(Order.customer_id == customer_id).all()
 
 
 def get_order_by_id(db, order_id, customer_id):
@@ -100,36 +92,40 @@ def get_order_by_id(db, order_id, customer_id):
 
 
 def assign_delivery_person(db, restaurant_id, order_id, delivery_person_id):
-    order = db.query(Order).filter(
-        Order.id == order_id,
-        Order.restaurant_id == restaurant_id,
-    ).first()
+    order = (
+        db.query(Order)
+        .filter(
+            Order.id == order_id,
+            Order.restaurant_id == restaurant_id,
+        )
+        .first()
+    )
 
     if order is None:
         raise NotFoundError("Order not found in this restaurant")
 
     if order.status != "ready":
-        raise ConflictError(
-            "A delivery person can only be assigned to a ready order"
-        )
+        raise ConflictError("A delivery person can only be assigned to a ready order")
 
-    delivery_person = db.query(DeliveryPerson).filter(
-        DeliveryPerson.id == delivery_person_id
-    ).first()
+    delivery_person = (
+        db.query(DeliveryPerson).filter(DeliveryPerson.id == delivery_person_id).first()
+    )
 
     if delivery_person is None:
         raise NotFoundError("Delivery person not found")
 
-    membership = db.query(RestaurantMembership).filter(
-        RestaurantMembership.user_id == delivery_person.user_id,
-        RestaurantMembership.restaurant_id == restaurant_id,
-        RestaurantMembership.role == "delivery_person",
-    ).first()
+    membership = (
+        db.query(RestaurantMembership)
+        .filter(
+            RestaurantMembership.user_id == delivery_person.user_id,
+            RestaurantMembership.restaurant_id == restaurant_id,
+            RestaurantMembership.role == "delivery_person",
+        )
+        .first()
+    )
 
     if membership is None:
-        raise ConflictError(
-            "This delivery person is not hired by this restaurant"
-        )
+        raise ConflictError("This delivery person is not hired by this restaurant")
 
     order.delivery_person_id = delivery_person.id
     db.flush()
@@ -177,10 +173,14 @@ def update_order_status(
 
 
 def update_order_items(db, order_id, customer_id, items):
-    order = db.query(Order).filter(
-        Order.id == order_id,
-        Order.customer_id == customer_id,
-    ).first()
+    order = (
+        db.query(Order)
+        .filter(
+            Order.id == order_id,
+            Order.customer_id == customer_id,
+        )
+        .first()
+    )
 
     if not items:
         raise ValueError("An order must contain at least one item")
@@ -193,16 +193,16 @@ def update_order_items(db, order_id, customer_id, items):
     food_ids = [item.food_id for item in items]
 
     if len(food_ids) != len(set(food_ids)):
-        raise ValueError(
-            "Duplicate food_id found. Each food_id must be unique."
-        )
+        raise ValueError("Duplicate food_id found. Each food_id must be unique.")
 
     food_prices = {
         food.id: food.price
-        for food in db.query(Food).filter(
+        for food in db.query(Food)
+        .filter(
             Food.id.in_(food_ids),
             Food.restaurant_id == order.restaurant_id,
-        ).all()
+        )
+        .all()
     }
 
     for food_id in food_ids:
@@ -211,10 +211,7 @@ def update_order_items(db, order_id, customer_id, items):
                 f"Food with id {food_id} does not exist in this restaurant"
             )
 
-    existing_items = {
-        item.food_id: item
-        for item in order.order_items
-    }
+    existing_items = {item.food_id: item for item in order.order_items}
     requested_food_ids = set(food_ids)
 
     for food_id, existing_item in existing_items.items():
@@ -235,9 +232,6 @@ def update_order_items(db, order_id, customer_id, items):
                 )
             )
 
-    order.total_price = sum(
-        item.price * item.quantity
-        for item in order.order_items
-    )
+    order.total_price = sum(item.price * item.quantity for item in order.order_items)
 
     return order
