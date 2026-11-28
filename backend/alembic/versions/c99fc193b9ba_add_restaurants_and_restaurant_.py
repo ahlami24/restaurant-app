@@ -6,9 +6,9 @@ Revises: 91bda81843fb
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "c99fc193b9ba"
 down_revision: Union[str, Sequence[str], None] = "91bda81843fb"
@@ -98,25 +98,10 @@ def upgrade() -> None:
 
     # Assign existing records to the initial restaurant.
     op.execute(
-        sa.text(
-            "UPDATE foods SET restaurant_id = :rid"
-        ).bindparams(rid=restaurant_id)
+        sa.text("UPDATE foods SET restaurant_id = :rid").bindparams(rid=restaurant_id)
     )
     op.execute(
-        sa.text(
-            "UPDATE orders SET restaurant_id = :rid"
-        ).bindparams(rid=restaurant_id)
-    )
-
-    # Assign user ID 10 as the restaurant owner.
-    op.execute(
-        sa.text(
-            """
-            INSERT INTO restaurant_memberships
-                (user_id, restaurant_id, role)
-            VALUES (10, :rid, 'owner')
-            """
-        ).bindparams(rid=restaurant_id)
+        sa.text("UPDATE orders SET restaurant_id = :rid").bindparams(rid=restaurant_id)
     )
 
     # Require restaurant ownership for every food and order.
@@ -135,18 +120,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "fk_orders_restaurant_id", "orders", type_="foreignkey"
-    )
+    op.drop_constraint("fk_orders_restaurant_id", "orders", type_="foreignkey")
     op.drop_column("orders", "restaurant_id")
 
-    op.drop_constraint(
-        "fk_foods_restaurant_id", "foods", type_="foreignkey"
-    )
+    op.drop_constraint("fk_foods_restaurant_id", "foods", type_="foreignkey")
     op.drop_column("foods", "restaurant_id")
 
     op.drop_table("restaurant_memberships")
     op.drop_index("ix_restaurants_slug", table_name="restaurants")
     op.drop_table("restaurants")
-
-    

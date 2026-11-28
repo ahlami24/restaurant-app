@@ -3,19 +3,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User, UserRole
 from app.models.customer import Customer
 from app.models.delivery_person import DeliveryPerson
 from app.models.restaurant import Restaurant, RestaurantMembership
+from app.models.user import User, UserRole
+from app.routes.dependencies import get_current_user, require_role
 from app.schemas.user import (
-    UserCreate,
-    UserResponse,
     RestaurantOwnerRegistration,
     RestaurantOwnerRegistrationResponse,
+    UserCreate,
+    UserResponse,
 )
 from app.services.user import create_user as create_user_service
-from app.routes.dependencies import get_current_user, require_role
-
 
 router = APIRouter(
     prefix="/users",

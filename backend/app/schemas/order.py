@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class OrderStatus(str, Enum):
     PENDING = "pending"
@@ -8,12 +10,16 @@ class OrderStatus(str, Enum):
     READY = "ready"
     OUT_FOR_DELIVERY = "out_for_delivery"
     DELIVERED = "delivered"
+
+
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
+
 
 class OrderItemCreate(BaseModel):
     food_id: int
     quantity: int = Field(..., gt=0)
+
 
 class OrderItemResponse(BaseModel):
     food_id: int
@@ -21,9 +27,13 @@ class OrderItemResponse(BaseModel):
     price: float
     model_config = ConfigDict(from_attributes=True)
 
+
 class OrderCreate(BaseModel):
     address: str
-    order_items: list[OrderItemCreate] = Field(min_length=1)  # List of dictionaries containing food_id and quantity
+    order_items: list[OrderItemCreate] = Field(
+        min_length=1
+    )  # List of dictionaries containing food_id and quantity
+
 
 class OrderResponse(BaseModel):
     id: int
@@ -31,9 +41,17 @@ class OrderResponse(BaseModel):
     address: str
     total_price: float
     status: OrderStatus
-    order_items: list[OrderItemResponse]  # List of dictionaries containing food_id, quantity, and price
+    delivery_person_id: int | None
+    order_items: list[
+        OrderItemResponse
+    ]  # List of dictionaries containing food_id, quantity, and price
     model_config = ConfigDict(from_attributes=True)
+
 
 class OrderItemUpdate(BaseModel):
     food_id: int
     quantity: int = Field(..., gt=0)
+
+
+class OrderDeliveryPersonAssignment(BaseModel):
+    delivery_person_id: int = Field(..., gt=0)

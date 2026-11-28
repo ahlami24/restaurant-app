@@ -44,7 +44,6 @@ def test_customer_cannot_create_food(client, db_session):
     assert response.status_code == 403
 
 
-
 def test_restaurant_owner_can_create_food(client, db_session):
     owner = create_user_service(
         db_session,
@@ -89,6 +88,7 @@ def test_restaurant_owner_can_create_food(client, db_session):
     assert response.status_code == 200
     assert response.json()["name"] == "Test Pizza"
 
+
 def test_restaurant_menu_only_shows_its_own_foods(client, db_session):
     restaurant1 = Restaurant(name="Restaurant 1", slug="restaurant-1")
     restaurant2 = Restaurant(name="Restaurant 2", slug="restaurant-2")
@@ -106,6 +106,7 @@ def test_restaurant_menu_only_shows_its_own_foods(client, db_session):
     assert len(foods) == 1
     assert foods[0]["name"] == "Food 1"
 
+
 def test_restaurant_cannot_access_other_restaurant_food(client, db_session):
     restaurant1 = Restaurant(name="Restaurant 1", slug="restaurant-1")
     restaurant2 = Restaurant(name="Restaurant 2", slug="restaurant-2")
@@ -119,9 +120,8 @@ def test_restaurant_cannot_access_other_restaurant_food(client, db_session):
     response = client.get(f"/restaurants/restaurant-2/foods/{food1.id}")
     assert response.status_code == 404
 
-def test_delivery_person_only_sees_orders_from_assigned_restaurants(
-    client, db_session
-):
+
+def test_delivery_person_only_sees_orders_from_assigned_restaurants(client, db_session):
     delivery_person = create_user_service(
         db_session,
         "Test Delivery Person",
@@ -152,20 +152,23 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
     customer = Customer(user_id=customer_user.id)
     delivery_profile = DeliveryPerson(user_id=delivery_person.id)
 
-    db_session.add_all([
-        customer,
-        delivery_profile,
-        RestaurantMembership(
-            user_id=delivery_person.id,
-            restaurant_id=assigned_restaurant.id,
-            role="delivery_person",
-        ),
-    ])
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=delivery_person.id,
+                restaurant_id=assigned_restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
     db_session.flush()
 
     assigned_order = Order(
         customer_id=customer.id,
         restaurant_id=assigned_restaurant.id,
+        delivery_person_id=delivery_profile.id,
         address="Address 1",
         total_price=100,
         status="ready",
@@ -185,11 +188,13 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
         status="pending",
     )
 
-    db_session.add_all([
-        assigned_order,
-        foreign_order,
-        pending_order,
-    ])
+    db_session.add_all(
+        [
+            assigned_order,
+            foreign_order,
+            pending_order,
+        ]
+    )
     db_session.commit()
 
     login = client.post(
@@ -209,17 +214,13 @@ def test_delivery_person_only_sees_orders_from_assigned_restaurants(
 
     assert response.status_code == 200
     orders = response.json()
-
     assert [order["id"] for order in orders] == [assigned_order.id]
 
 
-
-def test_delivery_person_can_update_orders_only_at_assigned_restaurants(
-    client, db_session
-):
+def test_delivery_person_can_update_only_assigned_orders(client, db_session):
     delivery_person = create_user_service(
         db_session,
-        "Multi Restaurant Delivery",
+        "Test Delivery Person",
         "0911000040",
         UserRole.user,
         "StrongTestPassword123",
@@ -240,60 +241,156 @@ def test_delivery_person_can_update_orders_only_at_assigned_restaurants(
         name="Restaurant B",
         slug="restaurant-b",
     )
-    restaurant_c = Restaurant(
-        name="Restaurant C",
-        slug="restaurant-c",
-    )
 
-    db_session.add_all([
-        restaurant_a,
-        restaurant_b,
-        restaurant_c,
-    ])
+    db_session.add_all([restaurant_a, restaurant_b])
     db_session.flush()
 
     customer = Customer(user_id=customer_user.id)
     delivery_profile = DeliveryPerson(user_id=delivery_person.id)
 
-    db_session.add_all([
-        customer,
-        delivery_profile,
-        RestaurantMembership(
-            user_id=delivery_person.id,
-            restaurant_id=restaurant_a.id,
-            role="delivery_person",
-        ),
-    ])
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=delivery_person.id,
+                restaurant_id=restaurant_a.id,
+                role="delivery_person",
+            ),
+        ]
+    )
     db_session.flush()
 
-    order_a = Order(
+    assigned_order = Order(
         customer_id=customer.id,
         restaurant_id=restaurant_a.id,
+        delivery_person_id=delivery_profile.id,
         address="Address A",
         total_price=100,
         status="ready",
     )
-    order_b = Order(
+    unassigned_order = Order(
         customer_id=customer.id,
-        restaurant_id=restaurant_b.id,
+        restaurant_id=restaurant_a.id,
         address="Address B",
         total_price=200,
         status="ready",
     )
-    order_c = Order(
+    foreign_order = Order(
         customer_id=customer.id,
-        restaurant_id=restaurant_c.id,
+        restaurant_id=restaurant_b.id,
         address="Address C",
         total_price=300,
         status="ready",
     )
 
-    db_session.add_all([order_a, order_b, order_c])
+    db_session.add_all(
+        [
+            assigned_order,
+            unassigned_order,
+            foreign_order,
+        ]
+    )
     db_session.commit()
 
-    order_a_id = order_a.id
-    order_b_id = order_b.id
-    order_c_id = order_c.id
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000040",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response_assigned = client.patch(
+        f"/orders/{assigned_order.id}/status",
+        json={"status": "out_for_delivery"},
+        headers=headers,
+    )
+    assert response_assigned.status_code == 200
+    assert response_assigned.json()["status"] == "out_for_delivery"
+
+    response_unassigned = client.patch(
+        f"/orders/{unassigned_order.id}/status",
+        json={"status": "out_for_delivery"},
+        headers=headers,
+    )
+    assert response_unassigned.status_code == 403
+
+    response_foreign = client.patch(
+        f"/orders/{foreign_order.id}/status",
+        json={"status": "out_for_delivery"},
+        headers=headers,
+    )
+    assert response_foreign.status_code == 403
+
+    db_session.refresh(delivery_person)
+    assert delivery_person.role == UserRole.user
+    assert delivery_person.delivery_person is not None
+
+
+def test_owner_can_assign_hired_delivery_person_to_ready_order(client, db_session):
+    owner = create_user_service(
+        db_session,
+        "Test Owner",
+        "0911000040",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user = create_user_service(
+        db_session,
+        "Test Delivery Person",
+        "0911000041",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000042",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+
+    restaurant = Restaurant(
+        name="Test Restaurant",
+        slug="test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_user.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=owner.id,
+                restaurant_id=restaurant.id,
+                role="owner",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        address="Test Address",
+        total_price=100,
+        status="ready",
+    )
+    db_session.add(order)
+    db_session.commit()
 
     login = client.post(
         "/auth/login",
@@ -304,48 +401,561 @@ def test_delivery_person_can_update_orders_only_at_assigned_restaurants(
     )
     assert login.status_code == 200
     token = login.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
 
-    response_a = client.patch(
-        f"/orders/{order_a_id}/status",
-        json={"status": "out_for_delivery"},
-        headers=headers,
+    response = client.patch(
+        f"/restaurants/test-restaurant/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile.id},
+        headers={"Authorization": f"Bearer {token}"},
     )
-    assert response_a.status_code == 200
-    assert response_a.json()["status"] == "out_for_delivery"
 
-    response_b = client.patch(
-        f"/orders/{order_b_id}/status",
-        json={"status": "out_for_delivery"},
-        headers=headers,
+    assert response.status_code == 200
+    assert response.json()["id"] == order.id
+    assert response.json()["delivery_person_id"] == delivery_profile.id
+
+    db_session.refresh(order)
+    assert order.delivery_person_id == delivery_profile.id
+
+
+def test_owner_cannot_assign_delivery_person_from_another_restaurant(
+    client, db_session
+):
+    owner = create_user_service(
+        db_session,
+        "Test Owner",
+        "0911000050",
+        UserRole.user,
+        "StrongTestPassword123",
     )
-    assert response_b.status_code == 403
-
-    response_c = client.patch(
-        f"/orders/{order_c_id}/status",
-        json={"status": "out_for_delivery"},
-        headers=headers,
+    delivery_user = create_user_service(
+        db_session,
+        "Test Delivery Person",
+        "0911000051",
+        UserRole.user,
+        "StrongTestPassword123",
     )
-    assert response_c.status_code == 403
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000052",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
 
-    db_session.refresh(delivery_person)
-    assert delivery_person.role == UserRole.user
-    assert delivery_person.delivery_person is not None
+    restaurant_a = Restaurant(
+        name="Restaurant A",
+        slug="restaurant-a",
+    )
+    restaurant_b = Restaurant(
+        name="Restaurant B",
+        slug="restaurant-b",
+    )
+    db_session.add_all([restaurant_a, restaurant_b])
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_user.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=owner.id,
+                restaurant_id=restaurant_a.id,
+                role="owner",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user.id,
+                restaurant_id=restaurant_b.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant_a.id,
+        address="Test Address",
+        total_price=100,
+        status="ready",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000050",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/restaurant-a/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+
+    db_session.refresh(order)
+    assert order.delivery_person_id is None
+
+
+def test_owner_cannot_assign_delivery_person_before_order_is_ready(client, db_session):
+    owner = create_user_service(
+        db_session,
+        "Test Owner",
+        "0911000060",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user = create_user_service(
+        db_session,
+        "Test Delivery Person",
+        "0911000061",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000062",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+
+    restaurant = Restaurant(
+        name="Test Restaurant",
+        slug="test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_user.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=owner.id,
+                restaurant_id=restaurant.id,
+                role="owner",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        address="Test Address",
+        total_price=100,
+        status="preparing",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000060",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/test-restaurant/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+
+    db_session.refresh(order)
+    assert order.delivery_person_id is None
+
+
+def test_manager_can_assign_hired_delivery_person_to_ready_order(client, db_session):
+    manager = create_user_service(
+        db_session,
+        "Test Manager",
+        "0911000070",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user = create_user_service(
+        db_session,
+        "Test Delivery Person",
+        "0911000071",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000072",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+
+    restaurant = Restaurant(
+        name="Test Restaurant",
+        slug="test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_user.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=manager.id,
+                restaurant_id=restaurant.id,
+                role="manager",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        address="Test Address",
+        total_price=100,
+        status="ready",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000070",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/test-restaurant/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["delivery_person_id"] == delivery_profile.id
+
+    db_session.refresh(order)
+    assert order.delivery_person_id == delivery_profile.id
+
+
+def test_owner_can_reassign_delivery_person_to_ready_order(client, db_session):
+    owner = create_user_service(
+        db_session,
+        "Test Owner",
+        "0911000080",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user_a = create_user_service(
+        db_session,
+        "Delivery Person A",
+        "0911000081",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user_b = create_user_service(
+        db_session,
+        "Delivery Person B",
+        "0911000082",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000083",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+
+    restaurant = Restaurant(
+        name="Test Restaurant",
+        slug="test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile_a = DeliveryPerson(user_id=delivery_user_a.id)
+    delivery_profile_b = DeliveryPerson(user_id=delivery_user_b.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile_a,
+            delivery_profile_b,
+            RestaurantMembership(
+                user_id=owner.id,
+                restaurant_id=restaurant.id,
+                role="owner",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user_a.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user_b.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        delivery_person_id=delivery_profile_a.id,
+        address="Test Address",
+        total_price=100,
+        status="ready",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000080",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/test-restaurant/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile_b.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["delivery_person_id"] == delivery_profile_b.id
+
+    db_session.refresh(order)
+    assert order.delivery_person_id == delivery_profile_b.id
+
+
+def test_owner_cannot_reassign_delivery_person_after_delivery_starts(
+    client, db_session
+):
+    owner = create_user_service(
+        db_session,
+        "Test Owner",
+        "0911000090",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user_a = create_user_service(
+        db_session,
+        "Delivery Person A",
+        "0911000091",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user_b = create_user_service(
+        db_session,
+        "Delivery Person B",
+        "0911000092",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000093",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+
+    restaurant = Restaurant(
+        name="Test Restaurant",
+        slug="test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile_a = DeliveryPerson(user_id=delivery_user_a.id)
+    delivery_profile_b = DeliveryPerson(user_id=delivery_user_b.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile_a,
+            delivery_profile_b,
+            RestaurantMembership(
+                user_id=owner.id,
+                restaurant_id=restaurant.id,
+                role="owner",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user_a.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+            RestaurantMembership(
+                user_id=delivery_user_b.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        delivery_person_id=delivery_profile_a.id,
+        address="Test Address",
+        total_price=100,
+        status="out_for_delivery",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000090",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/test-restaurant/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile_b.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+
+    db_session.refresh(order)
+    assert order.delivery_person_id == delivery_profile_a.id
+
+
+def test_customer_cannot_assign_delivery_person_to_order(client, db_session):
+    customer_user = create_user_service(
+        db_session,
+        "Test Customer",
+        "0911000100",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+    delivery_user = create_user_service(
+        db_session,
+        "Test Delivery Person",
+        "0911000101",
+        UserRole.user,
+        "StrongTestPassword123",
+    )
+
+    restaurant = Restaurant(
+        name="Test Restaurant",
+        slug="test-restaurant",
+    )
+    db_session.add(restaurant)
+    db_session.flush()
+
+    customer = Customer(user_id=customer_user.id)
+    delivery_profile = DeliveryPerson(user_id=delivery_user.id)
+
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=delivery_user.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
+    db_session.flush()
+
+    order = Order(
+        customer_id=customer.id,
+        restaurant_id=restaurant.id,
+        address="Test Address",
+        total_price=100,
+        status="ready",
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login",
+        json={
+            "phone": "0911000100",
+            "password": "StrongTestPassword123",
+        },
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    response = client.patch(
+        f"/restaurants/test-restaurant/orders/{order.id}/delivery-person",
+        json={"delivery_person_id": delivery_profile.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+    db_session.refresh(order)
+    assert order.delivery_person_id is None
+
 
 def test_food_search_is_case_insensitive(client, db_session):
     restaurant = Restaurant(name="Search Restaurant", slug="search-restaurant")
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Chicken Burger", price=150, restaurant_id=restaurant.id),
-        Food(name="Cheese Pizza", price=250, restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(name="Chicken Burger", price=150, restaurant_id=restaurant.id),
+            Food(name="Cheese Pizza", price=250, restaurant_id=restaurant.id),
+        ]
+    )
     db_session.commit()
 
-    response = client.get(
-        "/restaurants/search-restaurant/foods?search=BURGER"
-    )
+    response = client.get("/restaurants/search-restaurant/foods?search=BURGER")
 
     assert response.status_code == 200
     assert [food["name"] for food in response.json()] == ["Chicken Burger"]
@@ -356,11 +966,13 @@ def test_food_price_filter(client, db_session):
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Cheap Meal", price=50, restaurant_id=restaurant.id),
-        Food(name="Medium Meal", price=150, restaurant_id=restaurant.id),
-        Food(name="Expensive Meal", price=300, restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(name="Cheap Meal", price=50, restaurant_id=restaurant.id),
+            Food(name="Medium Meal", price=150, restaurant_id=restaurant.id),
+            Food(name="Expensive Meal", price=300, restaurant_id=restaurant.id),
+        ]
+    )
     db_session.commit()
 
     response = client.get(
@@ -379,16 +991,17 @@ def test_food_search_and_price_filters_combine(client, db_session):
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Chicken Burger", price=150, restaurant_id=restaurant.id),
-        Food(name="Beef Burger", price=300, restaurant_id=restaurant.id),
-        Food(name="Chicken Pizza", price=180, restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(name="Chicken Burger", price=150, restaurant_id=restaurant.id),
+            Food(name="Beef Burger", price=300, restaurant_id=restaurant.id),
+            Food(name="Chicken Pizza", price=180, restaurant_id=restaurant.id),
+        ]
+    )
     db_session.commit()
 
     response = client.get(
-        "/restaurants/combined-restaurant/foods"
-        "?search=chicken&max_price=160"
+        "/restaurants/combined-restaurant/foods?search=chicken&max_price=160"
     )
 
     assert response.status_code == 200
@@ -406,21 +1019,37 @@ def test_food_filter_rejects_invalid_price_range(client, db_session):
 
     assert response.status_code == 422
 
+
 def test_food_category_filter_is_case_insensitive(client, db_session):
     restaurant = Restaurant(name="Category Restaurant", slug="category-restaurant")
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Chicken Burger", price=150, category="breakfast", restaurant_id=restaurant.id),
-        Food(name="Beef Burger", price=200, category="lunch", restaurant_id=restaurant.id),
-        Food(name="Pancake", price=100, category="breakfast", restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(
+                name="Chicken Burger",
+                price=150,
+                category="breakfast",
+                restaurant_id=restaurant.id,
+            ),
+            Food(
+                name="Beef Burger",
+                price=200,
+                category="lunch",
+                restaurant_id=restaurant.id,
+            ),
+            Food(
+                name="Pancake",
+                price=100,
+                category="breakfast",
+                restaurant_id=restaurant.id,
+            ),
+        ]
+    )
     db_session.commit()
 
-    response = client.get(
-        "/restaurants/category-restaurant/foods?category=BREAKFAST"
-    )
+    response = client.get("/restaurants/category-restaurant/foods?category=BREAKFAST")
 
     assert response.status_code == 200
     assert {food["name"] for food in response.json()} == {
@@ -428,16 +1057,34 @@ def test_food_category_filter_is_case_insensitive(client, db_session):
         "Pancake",
     }
 
+
 def test_food_category_and_price_filters_combine(client, db_session):
     restaurant = Restaurant(name="Combined Category", slug="combined-category")
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Chicken Burger", price=150, category="breakfast", restaurant_id=restaurant.id),
-        Food(name="Pancake", price=100, category="breakfast", restaurant_id=restaurant.id),
-        Food(name="Beef Burger", price=200, category="lunch", restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(
+                name="Chicken Burger",
+                price=150,
+                category="breakfast",
+                restaurant_id=restaurant.id,
+            ),
+            Food(
+                name="Pancake",
+                price=100,
+                category="breakfast",
+                restaurant_id=restaurant.id,
+            ),
+            Food(
+                name="Beef Burger",
+                price=200,
+                category="lunch",
+                restaurant_id=restaurant.id,
+            ),
+        ]
+    )
     db_session.commit()
 
     response = client.get(
@@ -447,47 +1094,45 @@ def test_food_category_and_price_filters_combine(client, db_session):
     assert response.status_code == 200
     assert [food["name"] for food in response.json()] == ["Pancake"]
 
+
 def test_food_sort_by_price_ascending(client, db_session):
     restaurant = Restaurant(name="Sorting Restaurant", slug="sorting-restaurant")
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Pizza", price=250, restaurant_id=restaurant.id),
-        Food(name="Burger", price=150, restaurant_id=restaurant.id),
-        Food(name="Sandwich", price=100, restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(name="Pizza", price=250, restaurant_id=restaurant.id),
+            Food(name="Burger", price=150, restaurant_id=restaurant.id),
+            Food(name="Sandwich", price=100, restaurant_id=restaurant.id),
+        ]
+    )
     db_session.commit()
 
-    response = client.get(
-        "/restaurants/sorting-restaurant/foods?sort_by=price_asc"
-    )
+    response = client.get("/restaurants/sorting-restaurant/foods?sort_by=price_asc")
 
     assert response.status_code == 200
-    assert [food["name"] for food in response.json()] == [
-        "Sandwich", "Burger", "Pizza"
-    ]
+    assert [food["name"] for food in response.json()] == ["Sandwich", "Burger", "Pizza"]
+
 
 def test_food_sort_by_price_descending(client, db_session):
     restaurant = Restaurant(name="Descending Restaurant", slug="descending-restaurant")
     db_session.add(restaurant)
     db_session.flush()
 
-    db_session.add_all([
-        Food(name="Pizza", price=250, restaurant_id=restaurant.id),
-        Food(name="Burger", price=150, restaurant_id=restaurant.id),
-        Food(name="Sandwich", price=100, restaurant_id=restaurant.id),
-    ])
+    db_session.add_all(
+        [
+            Food(name="Pizza", price=250, restaurant_id=restaurant.id),
+            Food(name="Burger", price=150, restaurant_id=restaurant.id),
+            Food(name="Sandwich", price=100, restaurant_id=restaurant.id),
+        ]
+    )
     db_session.commit()
 
-    response = client.get(
-        "/restaurants/descending-restaurant/foods?sort_by=price_desc"
-    )
+    response = client.get("/restaurants/descending-restaurant/foods?sort_by=price_desc")
 
     assert response.status_code == 200
-    assert [food["name"] for food in response.json()] == [
-        "Pizza", "Burger", "Sandwich"
-    ]
+    assert [food["name"] for food in response.json()] == ["Pizza", "Burger", "Sandwich"]
 
 
 def test_creating_food_with_category(client, db_session):
@@ -535,6 +1180,7 @@ def test_creating_food_with_category(client, db_session):
     assert response.json()["name"] == "Vegan Salad"
     assert response.json()["category"] == "vegan"
 
+
 def test_updating_food_category(client, db_session):
     owner = create_user_service(
         db_session,
@@ -560,7 +1206,9 @@ def test_updating_food_category(client, db_session):
     db_session.add(membership)
     db_session.commit()
 
-    food = Food(name="Old Salad", price=10.00, category="salad", restaurant_id=restaurant.id)
+    food = Food(
+        name="Old Salad", price=10.00, category="salad", restaurant_id=restaurant.id
+    )
     db_session.add(food)
     db_session.commit()
 
@@ -582,6 +1230,7 @@ def test_updating_food_category(client, db_session):
 
     assert response.status_code == 200
     assert response.json()["category"] == "vegan"
+
 
 def test_clearing_existing_food_category(client, db_session):
     owner = create_user_service(
@@ -642,6 +1291,7 @@ def test_clearing_existing_food_category(client, db_session):
     assert clear_response.status_code == 200
     assert clear_response.json()["category"] is None
 
+
 def test_order_status_returns_conflict_and_not_found(
     client, db_session, make_user, auth_headers
 ):
@@ -658,15 +1308,17 @@ def test_order_status_returns_conflict_and_not_found(
     customer = Customer(user_id=customer_user.id)
     delivery_profile = DeliveryPerson(user_id=delivery_user.id)
 
-    db_session.add_all([
-        customer,
-        delivery_profile,
-        RestaurantMembership(
-            user_id=delivery_user.id,
-            restaurant_id=restaurant.id,
-            role="delivery_person",
-        ),
-    ])
+    db_session.add_all(
+        [
+            customer,
+            delivery_profile,
+            RestaurantMembership(
+                user_id=delivery_user.id,
+                restaurant_id=restaurant.id,
+                role="delivery_person",
+            ),
+        ]
+    )
     db_session.flush()
 
     order = Order(
@@ -694,6 +1346,7 @@ def test_order_status_returns_conflict_and_not_found(
         headers=headers,
     )
     assert missing_response.status_code == 404
+
 
 def test_create_order_returns_400_for_duplicate_food_ids(
     client, db_session, make_user, auth_headers
@@ -728,6 +1381,7 @@ def test_create_order_returns_400_for_duplicate_food_ids(
     )
 
     assert response.status_code == 400
+
 
 def test_update_order_items_rejects_empty_list(
     client, make_user, db_session, auth_headers

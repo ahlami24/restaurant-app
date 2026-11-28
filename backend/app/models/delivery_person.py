@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -7,9 +7,7 @@ from app.models.base import Base
 class DeliveryPerson(Base):
     __tablename__ = "delivery_persons"
 
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_delivery_person_user_id"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", name="uq_delivery_person_user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
@@ -21,5 +19,9 @@ class DeliveryPerson(Base):
 
     user = relationship(
         "User",
+        back_populates="delivery_person",
+    )
+    orders = relationship(
+        "Order",
         back_populates="delivery_person",
     )
